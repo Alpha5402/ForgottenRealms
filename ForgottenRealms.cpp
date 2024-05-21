@@ -51,6 +51,7 @@ char Forward = '\0';
 bool Use_Grid = false;
 bool Spawn_Foods = true;
 bool Running;
+int Owe_Length = 0;
 int Foods_Amount;
 int Current_Foods_Amount;
 int Length;
@@ -192,6 +193,24 @@ bool Point_In_Rect(const RECT& scope, const POINT& Pt) {
     return false;
 }
 
+void Load_Button_Images(HWND hwnd)
+{
+    GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken;
+    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+    buttonNormalImage = new Image(L"button.png");
+    buttonActiveImage = new Image(L"button_active.png");
+
+    GdiplusShutdown(gdiplusToken);
+}
+
+void Unload_Button_Images()
+{
+    delete buttonNormalImage;
+    delete buttonActiveImage;
+}
+
 void Draw_Image(HWND hWnd, int x, int y, const wchar_t* imagePath) {
     HDC hdc = GetDC(hWnd);
 
@@ -215,7 +234,7 @@ void Play_Media(LPCTSTR pszSound, HMODULE hmod, DWORD fdwSound) {
 }
 
 void Stop_Media() {
-    PlaySoundW(NULL, NULL, SND_PURGE);
+    PlaySoundW(NULL, NULL, 0);
 }
 
 COLORREF Get_Pixel_Color(HWND hWnd, POINT point) {
@@ -457,8 +476,6 @@ void Random_Draw_Snake() {
         head_y = Random(RELATIVE_HEIGHT / 4, RELATIVE_HEIGHT - RELATIVE_HEIGHT / 4);
         if (Adjacent_Unit_Amount(Translate(head_x, head_y), 0) == 4) break;
     }
-    //DrawUnitBlock(Translate(head_x, head_y), BLACK, Snake_Head_Color, true);
-
 
     int x = head_x;
     int y = head_y;
@@ -657,8 +674,10 @@ void Lengthen(place source, place target, COLORREF GridColor, COLORREF InsideCol
 }
 
 void Shorten(int begin) {
-    // ?????????????
-    if (begin > SnakePlace.size() - 3) begin = SnakePlace.size() - 3;
+    if (begin >= SnakePlace.size() - 1) { 
+        begin = SnakePlace.size() - 1; 
+        Draw_Image(GameHwnd, SnakePlace[0].x * IMAGE_SIZE, SnakePlace[0].y * IMAGE_SIZE, L"Snake_Head.png");
+    }
 
     int i = 1;
     auto it = SnakePlace.end() - 1;
@@ -671,6 +690,7 @@ void Shorten(int begin) {
         Length--;
         if (i > begin) break;
     }
+    return;
     /*setlinecolor(Snake_Color);
     if (commonsize.model) line(commonsize.x * UNIT_SIZE, commonsize.y * UNIT_SIZE, (commonsize.x + 1) * UNIT_SIZE, commonsize.y * UNIT_SIZE);
     else line(commonsize.x * UNIT_SIZE, commonsize.y * UNIT_SIZE, commonsize.x * UNIT_SIZE, (commonsize.y + 1) * UNIT_SIZE);*/
@@ -688,7 +708,8 @@ void Moving_Upward(bool lengthen, int type = -1) {
         SnakePlace[0].y--;
         Eating(type);
 
-        Check_Snake_To_Update(GameHwnd, SnakePlace[1], SnakePlace[2], SnakePlace[0]);
+        if (Length > 2)
+            Check_Snake_To_Update(GameHwnd, SnakePlace[1], SnakePlace[2], SnakePlace[0]);
         Update_Snake_Head(GameHwnd);
         Update_Snake_Rail(GameHwnd);
     }
@@ -701,7 +722,8 @@ void Moving_Upward(bool lengthen, int type = -1) {
         SnakePlace[0].y--;
         RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y] = 1;
     }
-    Check_Snake_To_Update(GameHwnd, SnakePlace[1], SnakePlace[2], SnakePlace[0]);
+    if (Length > 2)
+        Check_Snake_To_Update(GameHwnd, SnakePlace[1], SnakePlace[2], SnakePlace[0]);
     Update_Snake_Head(GameHwnd);
     Update_Snake_Rail(GameHwnd);
 }
@@ -725,7 +747,8 @@ void Moving_Downward(bool lengthen, int type = -1) {
         SnakePlace[0].y++;
         RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y] = 1;
     }
-    Check_Snake_To_Update(GameHwnd, SnakePlace[1], SnakePlace[2], SnakePlace[0]);
+    if (Length > 2)
+        Check_Snake_To_Update(GameHwnd, SnakePlace[1], SnakePlace[2], SnakePlace[0]);
     Update_Snake_Head(GameHwnd);
     Update_Snake_Rail(GameHwnd);
 }
@@ -749,7 +772,8 @@ void Moving_Left(bool lengthen, int type = -1) {
         SnakePlace[0].x--;
         RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y] = 1;
     }
-    Check_Snake_To_Update(GameHwnd, SnakePlace[1], SnakePlace[2], SnakePlace[0]);
+    if (Length > 2)
+        Check_Snake_To_Update(GameHwnd, SnakePlace[1], SnakePlace[2], SnakePlace[0]);
     Update_Snake_Head(GameHwnd);
     Update_Snake_Rail(GameHwnd);
 }
@@ -773,31 +797,10 @@ void Moving_Right(bool lengthen, int type = -1) {
         SnakePlace[0].x++;
         RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y] = 1;
     }
-    Check_Snake_To_Update(GameHwnd, SnakePlace[1], SnakePlace[2], SnakePlace[0]);
+    if (Length > 2)
+        Check_Snake_To_Update(GameHwnd, SnakePlace[1], SnakePlace[2], SnakePlace[0]);
     Update_Snake_Head(GameHwnd);
     Update_Snake_Rail(GameHwnd);
-}
-
-void Clear_Block_Occupied(char Forward, place loc) {
-    switch (Forward) {
-    case 'W':
-        if (RetroSnake_Hashes[LEFT(loc).x][loc.y] > RetroSnake_Hashes[RIGHT(loc).x][loc.y] and RetroSnake_Hashes[RIGHT(loc).x][loc.y] >= 10000) {
-            int x = loc.x - 1;
-            while (RetroSnake_Hashes[x][loc.y] >= 10000) {
-                RetroSnake_Hashes[x][loc.y] = -1;
-                Draw_Image(GameHwnd, x * IMAGE_SIZE, loc.y * IMAGE_SIZE, L"redstone_block.png");
-                x--;
-            }
-        }
-        else if (RetroSnake_Hashes[LEFT(loc).x][loc.y] < RetroSnake_Hashes[RIGHT(loc).x][loc.y] and RetroSnake_Hashes[LEFT(loc).x][loc.y] >= 10000) {
-            int x = loc.x + 1;
-            while (RetroSnake_Hashes[x][loc.y] >= 10000) {
-                RetroSnake_Hashes[x][loc.y] = -1;
-                Draw_Image(GameHwnd, x * IMAGE_SIZE, loc.y * IMAGE_SIZE, L"redstone_block.png");
-                x++;
-            }
-        }
-    }
 }
 
 void Water_Clear(place loc) {
@@ -986,19 +989,40 @@ void KeyBoard_Input(int userKey) {
     case 'W':
     case -72: {
         if (SnakePlace[0].y != 0) {
-            if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] <= 0)
-                Moving_Upward(false);
-            else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10000) {
-                Moving_Upward(false);
-                Water_Clear({SnakePlace[0].x, SnakePlace[0].y});
-                Check_Drying_Blocks();
+            if (Owe_Length) {
+                if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] <= 0) {
+                    Owe_Length--;
+                    Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10000) {
+                    Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
+                    Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
+                    Check_Drying_Blocks();
+                    Owe_Length--;
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10 and RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] < 1000)
+                    Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
+                else {
+                    cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y - 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] << endl;
+                    GameOver();
+                }
             }
-            else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10 and RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] < 1000)
-                Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
             else {
-                cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y - 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] << endl;
-                GameOver();
+                if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] <= 0)
+                    Moving_Upward(false);
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10000) {
+                    Moving_Upward(false);
+                    Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
+                    Check_Drying_Blocks();
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10 and RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] < 1000)
+                    Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
+                else {
+                    cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y - 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] << endl;
+                    GameOver();
+                }
             }
+
         }
         else GameOver();
         break;
@@ -1007,21 +1031,41 @@ void KeyBoard_Input(int userKey) {
     case 'S':
     case -80: {
         if (SnakePlace[0].y < RELATIVE_HEIGHT - 2) {
-            if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] <= 0)
-                Moving_Downward(false);
-            else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10000) {
-                //LiquidClearAccordingCoordinate(DOWN(SnakePlace[0]));
-                Moving_Downward(false);
-                Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
-                Check_Drying_Blocks();
+            if (Owe_Length) {
+                if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] <= 0) {
+                    Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
+                    Owe_Length--;
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10000) {
+                    Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
+                    Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
+                    Check_Drying_Blocks();
+                    Owe_Length--;
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10 and RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] < 1000)
+                    Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
+                else {
+                    cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y + 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] << endl;
+                    GameOver();
+                }
             }
-            else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10 and RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] < 1000)
-                Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
             else {
-                cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y + 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] << endl;
-                GameOver();
+                if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] <= 0)
+                    Moving_Downward(false);
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10000) {
+                    //LiquidClearAccordingCoordinate(DOWN(SnakePlace[0]));
+                    Moving_Downward(false);
+                    Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
+                    Check_Drying_Blocks();
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10 and RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] < 1000)
+                    Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
+                else {
+                    cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y + 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] << endl;
+                    GameOver();
+                }
             }
-        }
+        }  
         else GameOver();
         break;
     }
@@ -1029,27 +1073,40 @@ void KeyBoard_Input(int userKey) {
     case 'a':
     case -75: {
         if (SnakePlace[0].x != 0) {
-            if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] <= 0)
-                Moving_Left(false);
-            else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10000) {
-                //LiquidClearAccordingCoordinate(LEFT(SnakePlace[0]));
-                Moving_Left(false);
-                Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
-                Check_Drying_Blocks();
-                //else if ((RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10100 and RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] <= 20000)
-                //    or RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 20100) {
-                //    auto it = std::find(KidObstacle.begin(), KidObstacle.end(), LEFT(SnakePlace[0]));
-                //    if (it != KidObstacle.end()) {
-                //        KidObstacle.erase(it);
-                //    }
-                //}
+            if (Owe_Length){
+                if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] <= 0) {
+                    Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
+                    Owe_Length--;
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10000) {
+                    Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
+                    Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
+                    Check_Drying_Blocks();
+                    Owe_Length--;
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10 and RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] < 1000)
+                    Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
+                else {
+                    cout << "You dead in " << SnakePlace[0].x - 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] << endl;
+                    GameOver();
+                }
             }
-            else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10 and RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] < 1000)
-                Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
             else {
-                cout << "You dead in " << SnakePlace[0].x - 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] << endl;
-                GameOver();
+                if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] <= 0)
+                    Moving_Left(false);
+                else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10000) {
+                    Moving_Left(false);
+                    Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
+                    Check_Drying_Blocks();
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10 and RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] < 1000)
+                    Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
+                else {
+                    cout << "You dead in " << SnakePlace[0].x - 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] << endl;
+                    GameOver();
+                }
             }
+
         }
         else GameOver();
         break;
@@ -1058,27 +1115,40 @@ void KeyBoard_Input(int userKey) {
     case 'D':
     case -77: {
         if (SnakePlace[0].x < RELATIVE_WIDTH - 2) {
-            if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] <= 0)
-                Moving_Right(false);
-            else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10000) {
-                //LiquidClearAccordingCoordinate(RIGHT(SnakePlace[0]));
-                Moving_Right(false);
-                Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
-                Check_Drying_Blocks();
-                //else if ((RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10100 and RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] <= 20000)
-                //    or RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 20100) {
-                //    auto it = std::find(KidObstacle.begin(), KidObstacle.end(), RIGHT(SnakePlace[0]));
-                //    if (it != KidObstacle.end()) {
-                //        KidObstacle.erase(it);
-                //    }
-                //}
+            if (Owe_Length) {
+                if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] <= 0) {
+                    Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
+                    Owe_Length--;
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10000) {
+                    Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
+                    Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
+                    Check_Drying_Blocks();
+                    Owe_Length--;
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10 and RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] < 1000)
+                    Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
+                else {
+                    cout << "You dead in " << SnakePlace[0].x + 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] << endl;
+                    GameOver();
+                }
             }
-            else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10 and RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] < 1000)
-                Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
             else {
-                cout << "You dead in " << SnakePlace[0].x + 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] << endl;
-                GameOver();
+                if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] <= 0)
+                    Moving_Right(false);
+                else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10000) {
+                    Moving_Right(false);
+                    Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
+                    Check_Drying_Blocks();
+                }
+                else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10 and RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] < 1000)
+                    Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
+                else {
+                    cout << "You dead in " << SnakePlace[0].x + 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] << endl;
+                    GameOver();
+                }
             }
+
         }
         else GameOver();
         break;
@@ -1196,17 +1266,16 @@ void Level_Up() {
     Level++;
     BreakTime *= 0.8;
     Multiply += 0.5;
-    Clear_Obstacle();
-    int temp = Random(1, 1);
-#ifdef DEBUG
-    cout << temp << " Obstacle has been spawned." << endl;
-#endif
+    Clear_Windows();
+    Owe_Length = Length - 1;
+    Shorten(SnakePlace.size() - 1);
+    //Length = 1;
+    int temp = Random(1, 4);
     for (int i = 0; i < temp; i++) {
         Random_Draw_Obstacle();
     }
 
     Foods_Spawn();
-
     cout << "################################" << endl;
     cout << "#                              #" << endl;
     cout << "#           LEVEL UP           #" << endl;
@@ -1285,14 +1354,15 @@ int Detect(place location, int type, int model) {
 
 }
 
-void Clear_Obstacle() {
-    for (auto it = ObstaclePlace.begin(); it != ObstaclePlace.end(); it++) {
-        if (RetroSnake_Hashes[(*it).x][(*it).y] >= 10000) {
-            Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, L"stone.png");
-            RetroSnake_Hashes[(*it).x][(*it).y] = 0;
+void Clear_Windows() {
+    for (int i = 0; i < RELATIVE_WIDTH; i++) {
+        for (int j = 0; j < RELATIVE_HEIGHT; j++) {
+            if (i == SnakePlace[0].x and j == SnakePlace[0].y)
+                continue;
+            Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
+            RetroSnake_Hashes[i][j] = 0;
         }
     }
-    ObstaclePlace.clear();
 }
 
 // GDI+ Initialization
@@ -1393,14 +1463,7 @@ LRESULT CALLBACK NewGameProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
             break;
         }
         case VK_SPACE: {
-            for (int i = 0; i < RELATIVE_WIDTH - 1; i++) {
-                for (int j = 0; j < RELATIVE_HEIGHT - 1; j++) {
-                    if (RetroSnake_Hashes[i][j] == 0) {
-                        Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/Stone_Dark.png");
-                        RetroSnake_Hashes[i][j] = -1;
-                    }
-                }
-            }
+            Level_Up();
         }
         }
         if (!Invaild) {
