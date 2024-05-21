@@ -55,7 +55,7 @@ void Hash_Info();
 void Eating(int type);
 void Level_Up();
 int Detect(place location, int type, int model);
-void Clear_Obstacle();
+void Clear_Windows();
 // GDI+ Initialization
 void Gdiplus_Startup_Wrapper();
 void Gdiplus_Shutdown_Wrapper();

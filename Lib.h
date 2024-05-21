@@ -45,18 +45,20 @@ namespace std {
 #define MAP_SIZE           768
 #define MAP_HEIGHT         904
 #define MAP_WIDTH          1296
-//#define USING_BACKPACK
+#define IDI_MYICON 101
+#define USING_BACKPACK
 
 #define UNIT_SIZE          32
 #define IMAGE_SIZE         32
 #define ID_BUTTON_CLICK    1001
-#define RELATIVE_WIDTH           (((MAP_WIDTH - 16) / UNIT_SIZE) - 7)
+#define RELATIVE_WIDTH           (((MAP_WIDTH - 16) / UNIT_SIZE) - 8)
 #define RELATIVE_HEIGHT          (MAP_HEIGHT / UNIT_SIZE)
 #define WM_CUSTOM_BUTTON_CLICK   (WM_USER + 1)
 #define CENTER(WIDTH)            MAP_WIDTH / 2 - (WIDTH) / 2
 #define AUTO_MOVING_COOLDOWN 800
 #define WATER_SPREADING_COOLDOWN 600
 #define WATER_REFRESHING_COOLDOWN 200
+
 
 struct pathfinding {
     int forward;
