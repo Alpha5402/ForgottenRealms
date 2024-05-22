@@ -52,6 +52,7 @@ bool Use_Grid = false;
 bool Spawn_Foods = true;
 bool Running;
 int Owe_Length = 0;
+int Existing_Ores = 0;
 int Foods_Amount;
 int Current_Foods_Amount;
 int Length;
@@ -312,32 +313,103 @@ void RetroSnake_Destruction() {
     KillTimer(NULL, LiquidFlowing);
 }
 
-void Foods_Create(int value, int max) {
+int Is_Ores(place loc) {
+    if (WITHIN_CLOSED_INTERVAL(RetroSnake_Hashes[loc.x][loc.y], 10, 20)) {
+        return RetroSnake_Hashes[loc.x][loc.y];
+    }
+    return 0;
+}
+int Is_Ores(int Hash_Value) {
+    if (WITHIN_CLOSED_INTERVAL(Hash_Value, 10, 20)) {
+        return Hash_Value;
+    }
+    return 0;
+}
+int Is_Liquid(place loc) {
+    if (RetroSnake_Hashes[loc.x][loc.y] >= 10000) {
+        return RetroSnake_Hashes[loc.x][loc.y] / 10000;
+    }
+    return 0;
+}
+int Is_Liquid(int Hash_Value) {
+    if (Hash_Value >= 10000) {
+        return Hash_Value;
+    }
+    return 0;
+}
+int Is_Water(place loc) {
+    if (RetroSnake_Hashes[loc.x][loc.y] >= 20000) {
+        return (RetroSnake_Hashes[loc.x][loc.y] % 20000) / 100;
+    }
+    return 0;
+}
+int Is_Water(int Hash_Value) {
+    if (Hash_Value >= 20000) {
+        return (Hash_Value % 20000) / 100;
+    }
+    return 0;
+}
+int Is_Lava(place loc) {
+    if (WITHIN_CLOSED_INTERVAL(RetroSnake_Hashes[loc.x][loc.y], 10000, 20000)) {
+        return (RetroSnake_Hashes[loc.x][loc.y] % 10000) / 100;
+    }
+    return 0;
+}
+int Is_Lava(int Hash_Value) {
+    if (WITHIN_CLOSED_INTERVAL(Hash_Value, 10000, 20000)) {
+        return (Hash_Value % 10000) / 100;
+    }
+    return 0;
+}
+bool Is_Empty(place loc) {
+    if (RetroSnake_Hashes[loc.x][loc.y] == -1) {
+        return 1;
+    }
+    return 0;
+}
+bool Is_Empty(int Hash_Value) {
+    if (Hash_Value == -1) {
+        return 1;
+    }
+    return 0;
+}
+bool Is_Stone(place loc) {
+    if (RetroSnake_Hashes[loc.x][loc.y] == 0) {
+        return 1;
+    }
+    return 0;
+}
+bool Is_Stone(int Hash_Value) {
+    if (Hash_Value == 0) {
+        return 1;
+    }
+    return 0;
+}
+bool Is_Gravel(place loc) {
+    if (RetroSnake_Hashes[loc.x][loc.y] == 9999) {
+        return 1;
+    }
+    return 0;
+}
+bool Is_Gravel(int Hash_Value) {
+    if (Hash_Value == 9999) {
+        return 1;
+    }
+    return 0;
+}
+
+void Foods_Create(int type, int max) {
     while (1) {
         place food;
         food.x = Random(1, RELATIVE_WIDTH - 2);
         food.y = Random(1, RELATIVE_HEIGHT - 2);
-        // ??????????????
-        int type = value;
-#ifdef DEBUG
-        cout << "Food try to spawn in: (" << food.x << "," << food.y << ")" << endl;
-#endif
-        // ??????????????????????? 4?????¦Ë??????????
-        // ???????????????????????????
+        //int type = value;
         if (RetroSnake_Hashes[food.x][food.y] == 0 && Adjacent_Unit_Amount(food, 0) > 3) {
             Draw_Image(GameHwnd, food.x * IMAGE_SIZE, food.y * IMAGE_SIZE, aw[type]);
-            //putimage(food.x * IMAGE_SIZE, food.y * IMAGE_SIZE, &aw[type]);
-            //DrawUnitBlock(food, Frame_Color, Food_Color, true);
             RetroSnake_Hashes[food.x][food.y] = 10 + type;
-#ifdef DEBUG
-            cout << "Success. " << endl;
-#endif
             break;
         }
         else {
-#ifdef DEBUG
-            cout << "Failure. " << endl;
-#endif
             continue;
         }
     }
@@ -352,8 +424,6 @@ void Foods_Create(int* queue, int max) {
 
         if (RetroSnake_Hashes[food.x][food.y] == 0 && Adjacent_Unit_Amount(food, 0) > 3) {
             Draw_Image(GameHwnd, food.x * IMAGE_SIZE, food.y * IMAGE_SIZE, aw[type]);
-            //putimage(food.x * IMAGE_SIZE, food.y * IMAGE_SIZE, &aw[type]);
-            //DrawUnitBlock(food, Frame_Color, Food_Color, true);
             RetroSnake_Hashes[food.x][food.y] = 10 + type;
             break;
         }
@@ -362,9 +432,15 @@ void Foods_Create(int* queue, int max) {
         }
     }
 }
+void Foods_Create(place loc, int type) {
+    if (RetroSnake_Hashes[loc.x][loc.y] == 0 && Adjacent_Unit_Amount(loc, 0) > 3) {
+        Draw_Image(GameHwnd, loc.x * IMAGE_SIZE, loc.y * IMAGE_SIZE, aw[type]);
+        RetroSnake_Hashes[loc.x][loc.y] = 10 + type;
+    }
+}
 
-void Foods_Spawn() {
-    Current_Foods_Amount = Foods_Amount;
+void Foods_Spawn(int Amount) {
+    Current_Foods_Amount = Amount;
     for (int i = 0; i < Foods_Amount; i++) {
         int queue[5] = { 0, 1, 2, 4, 7 };
         Foods_Create(queue, 5);
@@ -683,8 +759,8 @@ void Shorten(int begin) {
     auto it = SnakePlace.end() - 1;
     while (i++) {
         //putimage((*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, &bp);
-        Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, L"Blocks/stone.png");
-        RetroSnake_Hashes[(*it).x][(*it).y] = 0;
+        Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, L"Blocks/Stone_Dark.png");
+        RetroSnake_Hashes[(*it).x][(*it).y] = -1;
         SnakePlace.pop_back();
         it = SnakePlace.end() - 1;
         Length--;
@@ -1275,7 +1351,7 @@ void Level_Up() {
         Random_Draw_Obstacle();
     }
 
-    Foods_Spawn();
+    Foods_Spawn(Foods_Amount - Existing_Ores);
     cout << "################################" << endl;
     cout << "#                              #" << endl;
     cout << "#           LEVEL UP           #" << endl;
@@ -1352,6 +1428,53 @@ int Detect(place location, int type, int model) {
         return 4;
     }
 
+}
+
+void Inherit(queue<std::pair<place, int>>& To_Handle) {
+    for (int i = 0; i < RELATIVE_WIDTH; i++) {
+        for (int j = 0; j < RELATIVE_HEIGHT; j++) {
+            if (Is_Empty({ i, j }) or Is_Stone({ i, j })) {
+                Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
+                RetroSnake_Hashes[i][j] = 0;
+            }
+            else if (Is_Ores({ i, j })) {
+                int roll = Random(0, 100);
+                if (roll <= 20) {
+                    To_Handle.push(std::pair<place, int>({ i, j }, RetroSnake_Hashes[i][j]));
+                    Existing_Ores++;
+                }
+                else {
+                    Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
+                    RetroSnake_Hashes[i][j] = 0;
+                }
+            }
+            else if (Is_Liquid({ i, j }) or Is_Gravel({i, j})) {
+                To_Handle.push(std::pair<place, int>({ i, j }, RetroSnake_Hashes[i][j]));
+            }
+        }
+    }
+}
+
+void Draw_Again(queue<std::pair<place, int>>& To_Handle) {
+    while (!To_Handle.empty()) {
+        place loc = To_Handle.front().first;
+        int type = To_Handle.front().second;
+
+        if (Is_Water(type)) {
+            RetroSnake_Hashes[loc.x][loc.y] = 2000;
+            Liq[0].insert(std::pair<place, int>(loc, 2));
+        }
+        else if (Is_Lava(type)) {
+            RetroSnake_Hashes[loc.x][loc.y] = 1000;
+            Liq[0].insert(std::pair<place, int>(loc, 2));
+        }
+        else if (Is_Gravel(type)) {
+            RetroSnake_Hashes[loc.x][loc.y] = 300;
+        }
+        else if (Is_Ores(type)) {
+
+        }
+    }
 }
 
 void Clear_Windows() {
