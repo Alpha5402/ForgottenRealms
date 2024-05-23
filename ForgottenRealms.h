@@ -4,6 +4,8 @@
 using namespace Gdiplus;
 using namespace std;
 
+extern int Foods_Amount;
+
 // Declaration
 int Random(int min, int max);
 int Partition(vector<pathfinding>& arr, int left, int right);
@@ -28,13 +30,14 @@ void RetroSnake_Initialize(HWND hwnd, bool Using_Grid, bool Spawning_Foods, int 
 void RetroSnake_Destruction();
 void Foods_Create(int value, int max);
 void Foods_Create(int* queue, int max);
-void Foods_Spawn();
+void Foods_Spawn(int Amount = Foods_Amount);
 void Update_Snake_Head(HWND hWnd);
 void Update_Snake_Rail(HWND hWnd);
 void Check_Snake_To_Update(HWND hWnd, place Now, place Next, place Before);
 void Draw_Snake_According_To_Vector(HWND hWnd);
 void Random_Draw_Snake();
 void Random_Draw_Obstacle();
+void Inherit(unordered_map<place, int> temp);
 int Adjacent_Unit_Amount(place location, int type);
 int Surrounding_Unit_Amount(place location, int type);
 place Find_Common_Side(place a, place b);

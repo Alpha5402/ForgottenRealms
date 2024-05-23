@@ -11,10 +11,13 @@ place head;
 HINSTANCE g_hInstance;
 WNDCLASS wc;
 WNDCLASS ng;
+WNDCLASS sb;
 HWND GameHwnd;
 HWND hWnd;
 HWND Button[4];
 RECT ButtonRect[4];
+HBRUSH hBrush;
+HFONT hFont;
 UINT_PTR AutoMovingTimer;
 UINT_PTR LiquidRefresh;
 UINT_PTR LiquidFlowing;
@@ -34,7 +37,8 @@ vector<place> SnakePlace;
 vector<place> ObstaclePlace;
 std::queue<place> WaterBlockToHandle;
 std::set<place> WaterBlockVisited;
-unordered_map<place, int > DryingBlock;
+unordered_map<place, int> DryingBlock;
+unordered_map<place, int> ObstacleAbove;
 vector<unordered_map<place, int>> Liq(8);
 
 const wchar_t* aw[8] = ORES;
@@ -52,6 +56,8 @@ bool Use_Grid = false;
 bool Spawn_Foods = true;
 bool Running;
 int Owe_Length = 0;
+int Max_Owe_Length = 0;
+int Existing_Ores = 0;
 int Foods_Amount;
 int Current_Foods_Amount;
 int Length;
@@ -146,7 +152,7 @@ void Draw_Rect(const HWND hWnd, const RECT Rect, const COLORREF colorBorder, con
 }
 
 void Draw_Fill_Rect(const HWND hWnd, const RECT Rect, const COLORREF colorBorder, const COLORREF colorFill) {
-    HDC hdc = GetDC(hWnd);// ??????????????????
+    HDC hdc = GetDC(hWnd);
     HPEN hPen = CreatePen(PS_SOLID, 1, colorBorder);
     if (hPen == NULL) {
         ReleaseDC(hWnd, hdc);
@@ -173,6 +179,39 @@ void Draw_Fill_Rect(const HWND hWnd, const RECT Rect, const COLORREF colorBorder
     DeleteObject(hPen);
 
     ReleaseDC(hWnd, hdc); // ????豸??????
+}
+
+void Draw_Text(HWND hWnd) {
+    //PAINTSTRUCT ps;
+    //HDC hdc = BeginPaint(hWnd, &ps);
+
+    //if (hdc == NULL) {
+    //    // 错误处理：无法获取设备上下文
+    //    return;
+    //}
+
+    //// 设置字体
+    //HFONT hFont = CreateFont(128, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, ANSI_CHARSET,
+    //    OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+    //    DEFAULT_PITCH | FF_SWISS, L"Arial");
+    //HFONT hOldFont = static_cast<HFONT>(SelectObject(hdc, hFont));
+    //if (hOldFont == NULL || hFont == NULL) {
+    //    // 错误处理：字体选择失败
+    //    DeleteObject(hFont);
+    //    return;
+    //}
+
+    //// 设置文本颜色
+    //SetTextColor(hdc, RGB(0, 0, 0));
+    //SetBkMode(hdc, TRANSPARENT);
+
+    //// 绘制文本
+    //int flat = TextOutW(hdc, loc.x, loc.y, text, lstrlenW(text)); // 使用lstrlenW获取字符串长度
+
+    //// 清理
+    //SelectObject(hdc, hOldFont); // 还原原来的字体
+    //DeleteObject(hFont);
+    //EndPaint(hWnd, &ps);
 }
 
 void Flood_Fill(const HWND hWnd, const POINT point, const COLORREF color, const DWORD model) {
@@ -283,15 +322,15 @@ void RetroSnake_Initialize(HWND hwnd, bool Using_Grid, bool Spawning_Foods, int 
         }
     }
 
-    for (int i = MAP_WIDTH / IMAGE_SIZE - 8; i < MAP_WIDTH / IMAGE_SIZE; i++) {
-        for (int j = 0; j < MAP_HEIGHT / IMAGE_SIZE; j++) {
-            Draw_Image(hwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/dirt.png");
-        }
-    }
+    //for (int i = MAP_WIDTH / IMAGE_SIZE - 8; i < MAP_WIDTH / IMAGE_SIZE; i++) {
+    //    for (int j = 0; j < MAP_HEIGHT / IMAGE_SIZE; j++) {
+    //        Draw_Image(hwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/dirt.png");
+    //    }
+    //}
 
     Random_Draw_Snake();
     //int temp = 1;
-    int temp = Random(1, 8);
+    int temp = Random(1, 4);
     for (int i = 0; i < temp; i++) {
         Random_Draw_Obstacle();
     }
@@ -310,34 +349,122 @@ void RetroSnake_Destruction() {
     KillTimer(NULL, AutoMovingTimer);
     KillTimer(NULL, LiquidRefresh);
     KillTimer(NULL, LiquidFlowing);
+
+    Hash_Temp.clear();
+    while(!WaterBlockToHandle.empty())
+        WaterBlockToHandle.pop();
+    WaterBlockVisited.clear();
+    DryingBlock.clear();
+    ObstacleAbove.clear();
+
+    for (auto it = Liq.begin(); it != Liq.end(); it++)
+        (*it).clear();
 }
 
-void Foods_Create(int value, int max) {
+int Is_Ores(place loc) {
+    if (WITHIN_CLOSED_INTERVAL(RetroSnake_Hashes[loc.x][loc.y], 10, 20)) {
+        return RetroSnake_Hashes[loc.x][loc.y];
+    }
+    return 0;
+}
+int Is_Ores(int Hash_Value) {
+    if (WITHIN_CLOSED_INTERVAL(Hash_Value, 10, 20)) {
+        return Hash_Value;
+    }
+    return 0;
+}
+int Is_Liquid(place loc) {
+    if (RetroSnake_Hashes[loc.x][loc.y] >= 10000) {
+        return RetroSnake_Hashes[loc.x][loc.y] / 10000;
+    }
+    return 0;
+}
+int Is_Liquid(int Hash_Value) {
+    if (Hash_Value >= 10000) {
+        return Hash_Value;
+    }
+    return 0;
+}
+int Is_Water(place loc) {
+    
+    if (WITHIN_CLOSED_OPEN_INTERVAL(RetroSnake_Hashes[loc.x][loc.y], 20000, 30000)) {
+        return (RetroSnake_Hashes[loc.x][loc.y] % 20000) / 100 + 1;
+    }
+    return 0;
+}
+int Is_Water(int Hash_Value) {
+    if (Hash_Value >= 20000) {
+        return ((Hash_Value % 20000) / 100) + 1;
+    }
+    return 0;
+}
+int Is_Lava(place loc) {
+    if (WITHIN_CLOSED_INTERVAL(RetroSnake_Hashes[loc.x][loc.y], 10000, 20000)) {
+        return (RetroSnake_Hashes[loc.x][loc.y] % 10000) / 100 + 1;
+    }
+    return 0;
+}
+int Is_Lava(int Hash_Value) {
+    if (WITHIN_CLOSED_INTERVAL(Hash_Value, 10000, 20000)) {
+        return ((Hash_Value % 10000) / 100) + 1;
+    }
+    return 0;
+}
+bool Is_Empty(place loc) {
+    if (RetroSnake_Hashes[loc.x][loc.y] == -1) {
+        return 1;
+    }
+    return 0;
+}
+bool Is_Empty(int Hash_Value) {
+    if (Hash_Value == -1) {
+        return 1;
+    }
+    return 0;
+}
+bool Is_Stone(place loc) {
+    if (RetroSnake_Hashes[loc.x][loc.y] == 0) {
+        return 1;
+    }
+    return 0;
+}
+bool Is_Stone(int Hash_Value) {
+    if (Hash_Value == 0) {
+        return 1;
+    }
+    return 0;
+}
+bool Is_Gravel(place loc) {
+    if (RetroSnake_Hashes[loc.x][loc.y] == 30000) {
+        return 1;
+    }
+    return 0;
+}
+bool Is_Gravel(int Hash_Value) {
+    if (Hash_Value == 9999) {
+        return 1;
+    }
+    return 0;
+}
+bool Is_Under_Sth(place loc, unordered_map<place, int> tmp) {
+    if (tmp.find(loc) != tmp.end()) {
+        return 1;
+    }
+    return 0;
+}
+
+void Foods_Create(int type, int max) {
     while (1) {
         place food;
         food.x = Random(1, RELATIVE_WIDTH - 2);
         food.y = Random(1, RELATIVE_HEIGHT - 2);
-        // ??????????????
-        int type = value;
-#ifdef DEBUG
-        cout << "Food try to spawn in: (" << food.x << "," << food.y << ")" << endl;
-#endif
-        // ??????????????????????? 4?????λ??????????
-        // ???????????????????????????
+        //int type = value;
         if (RetroSnake_Hashes[food.x][food.y] == 0 && Adjacent_Unit_Amount(food, 0) > 3) {
             Draw_Image(GameHwnd, food.x * IMAGE_SIZE, food.y * IMAGE_SIZE, aw[type]);
-            //putimage(food.x * IMAGE_SIZE, food.y * IMAGE_SIZE, &aw[type]);
-            //DrawUnitBlock(food, Frame_Color, Food_Color, true);
             RetroSnake_Hashes[food.x][food.y] = 10 + type;
-#ifdef DEBUG
-            cout << "Success. " << endl;
-#endif
             break;
         }
         else {
-#ifdef DEBUG
-            cout << "Failure. " << endl;
-#endif
             continue;
         }
     }
@@ -352,8 +479,6 @@ void Foods_Create(int* queue, int max) {
 
         if (RetroSnake_Hashes[food.x][food.y] == 0 && Adjacent_Unit_Amount(food, 0) > 3) {
             Draw_Image(GameHwnd, food.x * IMAGE_SIZE, food.y * IMAGE_SIZE, aw[type]);
-            //putimage(food.x * IMAGE_SIZE, food.y * IMAGE_SIZE, &aw[type]);
-            //DrawUnitBlock(food, Frame_Color, Food_Color, true);
             RetroSnake_Hashes[food.x][food.y] = 10 + type;
             break;
         }
@@ -362,9 +487,15 @@ void Foods_Create(int* queue, int max) {
         }
     }
 }
+void Foods_Create(place loc, int type) {
+    if (RetroSnake_Hashes[loc.x][loc.y] == 0 && Adjacent_Unit_Amount(loc, 0) > 3) {
+        Draw_Image(GameHwnd, loc.x * IMAGE_SIZE, loc.y * IMAGE_SIZE, aw[type]);
+        RetroSnake_Hashes[loc.x][loc.y] = 10 + type;
+    }
+}
 
-void Foods_Spawn() {
-    Current_Foods_Amount = Foods_Amount;
+void Foods_Spawn(int Amount) {
+    Current_Foods_Amount = Amount;
     for (int i = 0; i < Foods_Amount; i++) {
         int queue[5] = { 0, 1, 2, 4, 7 };
         Foods_Create(queue, 5);
@@ -396,7 +527,9 @@ void Foods_Spawn() {
 }
 
 void Update_Snake_Head(HWND hWnd) {
-    if (SnakePlace[1] == LEFT(SnakePlace[0]))
+    if (SnakePlace.size() < 2) 
+        Draw_Image(hWnd, SnakePlace[0].x * IMAGE_SIZE, SnakePlace[0].y * IMAGE_SIZE, L"Snake_Head.png");
+    else if (SnakePlace[1] == LEFT(SnakePlace[0]))
         Draw_Image(hWnd, SnakePlace[0].x * IMAGE_SIZE, SnakePlace[0].y * IMAGE_SIZE, L"Snake_RightHead.png");
     else if (SnakePlace[1] == RIGHT(SnakePlace[0]))
         Draw_Image(hWnd, SnakePlace[0].x * IMAGE_SIZE, SnakePlace[0].y * IMAGE_SIZE, L"Snake_LeftHead.png");
@@ -407,6 +540,7 @@ void Update_Snake_Head(HWND hWnd) {
 }
 
 void Update_Snake_Rail(HWND hWnd) {
+    if (SnakePlace.size() < 2) return;
     if (SnakePlace[SnakePlace.size() - 1] == LEFT(SnakePlace[SnakePlace.size() - 2]))
         Draw_Image(hWnd, SnakePlace[SnakePlace.size() - 1].x * IMAGE_SIZE, SnakePlace[SnakePlace.size() - 1].y * IMAGE_SIZE, L"Snake_LeftRail.png");
     else if (SnakePlace[SnakePlace.size() - 1] == RIGHT(SnakePlace[SnakePlace.size() - 2]))
@@ -420,11 +554,9 @@ void Update_Snake_Rail(HWND hWnd) {
 void Check_Snake_To_Update(HWND hWnd, place Now, place Next, place Before) {
     if (Now.x == Before.x and Now.x == Next.x) {
         Draw_Image(hWnd, Now.x * IMAGE_SIZE, Now.y * IMAGE_SIZE, L"Snake_UpDown.png");
-        // ???
     }
     else if (Now.y == Before.y and Now.y == Next.y) {
         Draw_Image(hWnd, Now.x * IMAGE_SIZE, Now.y * IMAGE_SIZE, L"Snake_LeftRight.png");
-        // ??
     }
     else if (Before == LEFT(Now) and Next == DOWN(Now)) {
         Draw_Image(hWnd, Now.x * IMAGE_SIZE, Now.y * IMAGE_SIZE, L"Snake_LeftDown.png");
@@ -432,21 +564,18 @@ void Check_Snake_To_Update(HWND hWnd, place Now, place Next, place Before) {
     else if (Next == LEFT(Now) and Before == DOWN(Now)) {
         Draw_Image(hWnd, Now.x * IMAGE_SIZE, Now.y * IMAGE_SIZE, L"Snake_LeftDown.png");
     }
-    // ????
     else if (Before == LEFT(Now) and Next == UP(Now)) {
         Draw_Image(hWnd, Now.x * IMAGE_SIZE, Now.y * IMAGE_SIZE, L"Snake_LeftUp.png");
     }
     else if (Next == LEFT(Now) and Before == UP(Now)) {
         Draw_Image(hWnd, Now.x * IMAGE_SIZE, Now.y * IMAGE_SIZE, L"Snake_LeftUp.png");
     }
-    // ????
     else if (Before == RIGHT(Now) and Next == DOWN(Now)) {
         Draw_Image(hWnd, Now.x * IMAGE_SIZE, Now.y * IMAGE_SIZE, L"Snake_RightDown.png");
     }
     else if (Next == RIGHT(Now) and Before == DOWN(Now)) {
         Draw_Image(hWnd, Now.x * IMAGE_SIZE, Now.y * IMAGE_SIZE, L"Snake_RightDown.png");
     }
-    // ????
     else if (Before == RIGHT(Now) and Next == UP(Now)) {
         Draw_Image(hWnd, Now.x * IMAGE_SIZE, Now.y * IMAGE_SIZE, L"Snake_RightUp.png");
     }
@@ -455,7 +584,6 @@ void Check_Snake_To_Update(HWND hWnd, place Now, place Next, place Before) {
     }
     else
         Draw_Image(hWnd, Now.x * IMAGE_SIZE, Now.y * IMAGE_SIZE, L"magma.png");
-    // ????
 }
 
 void Draw_Snake_According_To_Vector(HWND hWnd) {
@@ -530,13 +658,18 @@ void Random_Draw_Obstacle() {
         center.y = Random(0, RELATIVE_HEIGHT - 2);
         if (RetroSnake_Hashes[center.x][center.y] == 0) break;
     }
-    int Type = Random(1, 2);
-    Draw_Image(GameHwnd, center.x * IMAGE_SIZE, center.y * IMAGE_SIZE, Type == 1 ? L"Lava/Lava_1.png" : L"Water_Still/Water_Still_1.png");
+    int Type = Random(1, 3);
+    switch (Type) {
+    case 1: Draw_Image(GameHwnd, center.x * IMAGE_SIZE, center.y * IMAGE_SIZE, L"Lava/Lava_1.png"); break;
+    case 2: Draw_Image(GameHwnd, center.x * IMAGE_SIZE, center.y * IMAGE_SIZE, L"Water_Still/Water_Still_1.png"); break;
+    case 3: Draw_Image(GameHwnd, center.x * IMAGE_SIZE, center.y * IMAGE_SIZE, L"Blocks/Gravel.png"); break;
+    }
+    
     int x = center.x;
     int y = center.y;
     int cnt = 0;
     int list[4] = { 1, 2, 3, 4 };
-    int Obstacle_Size = Random(1, 6);
+    int Obstacle_Size = Random(1, 8);
     place temp = { x, y };
     temp.flag = 0;
 
@@ -549,38 +682,56 @@ void Random_Draw_Obstacle() {
             if (cnt >= 4) break;
             int forward = Detect(Translate(x, y), 4, list[cnt]);
             if (forward == 1 && x - 1 >= 0 && RetroSnake_Hashes[x - 1][y] == 0) {
-                Draw_Image(GameHwnd, (x - 1) * IMAGE_SIZE, y * IMAGE_SIZE, Type == 1 ? L"Lava/Lava_1.png" : L"Water_Still/Water_Still_1.png");
                 cnt = 0;
                 ObstaclePlace.push_back(LEFT(Translate(x, y)));
                 RetroSnake_Hashes[x - 1][y] = 10000 * Type;
                 x -= 1;
+                switch (Type) {
+                case 1: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Lava/Lava_1.png"); break;
+                case 2: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Water_Still/Water_Still_1.png"); break;
+                case 3: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Blocks/Gravel.png"); break;
+                }
                 Liq[0].emplace(std::pair<place, int>({ x, y }, Type));
                 break;
             }
             if (forward == 2 && x + 2 < RELATIVE_WIDTH && RetroSnake_Hashes[x + 1][y] == 0) {
-                Draw_Image(GameHwnd, (x + 1) * IMAGE_SIZE, y * IMAGE_SIZE, Type == 1 ? L"Lava/Lava_1.png" : L"Water_Still/Water_Still_1.png");
                 cnt = 0;
                 ObstaclePlace.push_back(RIGHT(Translate(x, y)));
                 RetroSnake_Hashes[x + 1][y] = 10000 * Type;
                 x += 1;
+                switch (Type) {
+                case 1: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Lava/Lava_1.png"); break;
+                case 2: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Water_Still/Water_Still_1.png"); break;
+                case 3: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Blocks/Gravel.png"); break;
+                }
                 Liq[0].emplace(std::pair<place, int>({ x, y }, Type));
                 break;
             }
             if (forward == 3 && y - 1 >= 0 && RetroSnake_Hashes[x][y - 1] == 0) {
-                Draw_Image(GameHwnd, x * IMAGE_SIZE, (y - 1) * IMAGE_SIZE, Type == 1 ? L"Lava/Lava_1.png" : L"Water_Still/Water_Still_1.png");
+
                 cnt = 0;
                 ObstaclePlace.push_back(UP(Translate(x, y)));
                 RetroSnake_Hashes[x][y - 1] = 10000 * Type;
                 y -= 1;
+                switch (Type) {
+                case 1: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Lava/Lava_1.png"); break;
+                case 2: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Water_Still/Water_Still_1.png"); break;
+                case 3: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Blocks/Gravel.png"); break;
+                }
                 Liq[0].emplace(std::pair<place, int>({ x, y }, Type));
                 break;
             }
             if (forward == 4 && y + 2 < RELATIVE_HEIGHT && RetroSnake_Hashes[x][y + 1] == 0) {
-                Draw_Image(GameHwnd, x * IMAGE_SIZE, (y + 1) * IMAGE_SIZE, Type == 1 ? L"Lava/Lava_1.png" : L"Water_Still/Water_Still_1.png");
+
                 cnt = 0;
                 ObstaclePlace.push_back(DOWN(Translate(x, y)));
                 RetroSnake_Hashes[x][y + 1] = 10000 * Type;
                 y += 1;
+                switch (Type) {
+                case 1: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Lava/Lava_1.png"); break;
+                case 2: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Water_Still/Water_Still_1.png"); break;
+                case 3: Draw_Image(GameHwnd, x * IMAGE_SIZE, y * IMAGE_SIZE, L"Blocks/Gravel.png"); break;
+                }
                 Liq[0].emplace(std::pair<place, int>({ x, y }, Type));
                 break;
             }
@@ -674,16 +825,18 @@ void Lengthen(place source, place target, COLORREF GridColor, COLORREF InsideCol
 }
 
 void Shorten(int begin) {
+    
     if (begin >= SnakePlace.size() - 1) { 
         begin = SnakePlace.size() - 1; 
         Draw_Image(GameHwnd, SnakePlace[0].x * IMAGE_SIZE, SnakePlace[0].y * IMAGE_SIZE, L"Snake_Head.png");
+        RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y] = 1;
     }
-
+    if (SnakePlace.size() == 1) return;
     int i = 1;
     auto it = SnakePlace.end() - 1;
     while (i++) {
         //putimage((*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, &bp);
-        Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, L"Blocks/stone.png");
+        Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, L"Blocks/Stone.png");
         RetroSnake_Hashes[(*it).x][(*it).y] = 0;
         SnakePlace.pop_back();
         it = SnakePlace.end() - 1;
@@ -1266,8 +1419,15 @@ void Level_Up() {
     Level++;
     BreakTime *= 0.8;
     Multiply += 0.5;
-    Clear_Windows();
-    Owe_Length = Length - 1;
+    for(int i = 0; i < Liq.size(); i++)
+        Liq[i].clear();
+    unordered_map<place, int> Temp_Map(ObstacleAbove);
+    ObstacleAbove.clear();
+    Inherit(Temp_Map);
+    
+    
+    //Clear_Windows();
+    Owe_Length = Length - 1 + Owe_Length;
     Shorten(SnakePlace.size() - 1);
     //Length = 1;
     int temp = Random(1, 4);
@@ -1275,13 +1435,7 @@ void Level_Up() {
         Random_Draw_Obstacle();
     }
 
-    Foods_Spawn();
-    cout << "################################" << endl;
-    cout << "#                              #" << endl;
-    cout << "#           LEVEL UP           #" << endl;
-    cout << "#                              #" << endl;
-    cout << "################################" << endl;
-    cout << "[System] Now the LEVEL is " << Level << endl;
+    Foods_Spawn(Foods_Amount - Existing_Ores);
 }
 
 int Detect(place location, int type, int model) {
@@ -1354,6 +1508,46 @@ int Detect(place location, int type, int model) {
 
 }
 
+void Inherit(unordered_map<place, int> temp) {
+    for (int i = 0; i < RELATIVE_WIDTH; i++) {
+        for (int j = 0; j < RELATIVE_HEIGHT; j++) {
+            if (Is_Empty({ i, j }) or Is_Stone({ i, j }) or Is_Under_Sth({i, j}, temp)) {
+                Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
+                RetroSnake_Hashes[i][j] = 0;
+            }
+            else if (Is_Ores({ i, j })) {
+                int roll = Random(0, 100);
+                if (roll <= 20) {
+                    //To_Handle.push(std::pair<place, int>({ i, j }, RetroSnake_Hashes[i][j]));
+                    Existing_Ores++;
+                }
+                else {
+                    Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
+                    RetroSnake_Hashes[i][j] = 0;
+                }
+            }
+            else if (Is_Water({ i, j })) {
+                RetroSnake_Hashes[i][j] = 20099;
+                Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
+                Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/Stone_Under_Water.png");
+                ObstacleAbove.insert(std::pair<place, int>({i, j}, 2));
+            }
+            else if (Is_Lava({ i, j })) {
+                RetroSnake_Hashes[i][j] = 10099;
+                Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
+                Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/Stone_Under_Lava.png");
+                ObstacleAbove.insert(std::pair<place, int>({ i, j }, 1));
+            }
+            else if (Is_Gravel({ i, j })) {
+                RetroSnake_Hashes[i][j] = 30099;
+                Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
+                Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/Stone_Under_Gravel.png");
+                ObstacleAbove.insert(std::pair<place, int>({ i, j }, 3));
+            }
+        }
+    }
+}
+
 void Clear_Windows() {
     for (int i = 0; i < RELATIVE_WIDTH; i++) {
         for (int j = 0; j < RELATIVE_HEIGHT; j++) {
@@ -1375,9 +1569,66 @@ void Gdiplus_Shutdown_Wrapper() {
     Gdiplus::GdiplusShutdown(g_gdiplusToken);
 }
 
+void Water_Vertical_Flow() {
+    for (auto it = ObstacleAbove.begin(); it != ObstacleAbove.end(); it++) {
+        if (RetroSnake_Hashes[it->first.x][it->first.y] == -1) {
+            RetroSnake_Hashes[it->first.x][it->first.y] = it->second * 10000;
+            switch (it->second) {
+            case 1: Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, L"Lava/Lava_1.png"); break;
+            case 2: Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, L"Water_Still/Water_Still_1.png"); break;
+            case 3: Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, L"Blocks/Gravel.png"); break;
+            }
+            
+            Liq[0].insert(std::pair<place, int>(it->first, it->second));
+        }
+    }
+}
+
+HWND CreateTransparentStatic(HWND hwndParent, HINSTANCE hInstance, const wchar_t* text, int x, int y, int width, int height) {
+    HWND hwndStatic = CreateWindowEx(
+        0,
+        L"STATIC",
+        text,
+        WS_VISIBLE | WS_CHILD | SS_CENTER,
+        x, y, width, height,
+        hwndParent,
+        NULL,
+        hInstance,
+        NULL);
+
+    for (int i = 0; i < MAP_WIDTH / IMAGE_SIZE - MAP_WIDTH / IMAGE_SIZE + 8; i++) {
+        for (int j = 0; j < MAP_HEIGHT / IMAGE_SIZE; j++) {
+            Draw_Image(hwndStatic, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/dirt.png");
+        }
+    }
+
+    // 创建自定义字体
+    hFont = CreateFont(
+        24,                        // 字体高度
+        0,                         // 字体宽度
+        0,                         // 字体倾斜角度
+        0,                         // 字体方向角度
+        FW_BOLD,                   // 字体重量
+        FALSE,                     // 斜体
+        FALSE,                     // 下划线
+        FALSE,                     // 删除线
+        ANSI_CHARSET,              // 字符集
+        OUT_DEFAULT_PRECIS,        // 输出精度
+        CLIP_DEFAULT_PRECIS,       // 裁剪精度
+        DEFAULT_QUALITY,           // 输出质量
+        DEFAULT_PITCH | FF_SWISS,  // 字体族和间距
+        L"Arial");                  // 字体名称
+
+    // 将自定义字体应用到静态控件
+    SendMessage(hwndStatic, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+    return hwndStatic;
+}
+
 VOID CALLBACK Liquid_Flowing_Function(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     Water_Spreading();
     Blocks_Drying();
+    Water_Vertical_Flow();
 }
 
 VOID CALLBACK Auto_Moving(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
@@ -1425,22 +1676,36 @@ VOID CALLBACK Liquid_Refresh_Function(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DW
     // dwTime ?????????????
 }
 
-LRESULT CALLBACK NewGameProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK NewGameProc(HWND GamehWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    static HWND hwndStatic;
+    static HBRUSH hBrush = NULL;
     switch (message) {
+    case WM_CTLCOLORSTATIC: {
+        // 设置静态控件的背景为透明
+        HDC hdcStatic = (HDC)wParam;
+        SetBkMode(hdcStatic, TRANSPARENT);
+        SetTextColor(hdcStatic, RGB(0, 0, 0)); // 设置文本颜色为黑色
+
+        // 返回窗口的背景画刷，以便静态控件使用窗口的背景颜色
+        //if (!hBrush) {
+            hBrush = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
+        //}
+        return (LRESULT)hBrush;
+    }
     case WM_CLOSE:
-        //if (MessageBox(hWnd, L"Really quit?", L"My application", MB_OKCANCEL) == IDOK)
-            DestroyWindow(hWnd);
+        DestroyWindow(GamehWnd);
         return 0;
     case WM_DESTROY:
-        if (GameHwnd == hWnd) {
+        if (GameHwnd == GamehWnd) {
             GameHwnd = NULL;
         }
+        ShowWindow(hWnd, SW_SHOW);
         RetroSnake_Destruction();
         break;
     case WM_KEYDOWN: {
         char FLAG = '\0';
         bool Invaild = false;
-         
+
         switch (wParam) {
         case 0x57: {
             FLAG = 'W';
@@ -1464,6 +1729,7 @@ LRESULT CALLBACK NewGameProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
         }
         case VK_SPACE: {
             Level_Up();
+            //InvalidateRect(hWnd, NULL, TRUE);
         }
         }
         if (!Invaild) {
@@ -1474,24 +1740,20 @@ LRESULT CALLBACK NewGameProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
             AutoMovingTimer = SetTimer(NULL, 1, AUTO_MOVING_COOLDOWN, (TIMERPROC)Auto_Moving);
             break;
         }
-
-
     }
     default:
-        return DefWindowProc(hWnd, message, wParam, lParam);
+        return DefWindowProc(GamehWnd, message, wParam, lParam);
     }
-
     return 0;
 }
 
 LRESULT CALLBACK MainMenuProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+
     switch (message) {
-        //case WM_KEYDOWN:{
     case WM_MOUSEMOVE: {
         POINT point;
         point.x = GET_X_LPARAM(lParam);
         point.y = GET_Y_LPARAM(lParam);
-        // ??? ????
 
         // buttonRect = { 100, 100, 300, 140 };
 
@@ -1565,7 +1827,7 @@ LRESULT CALLBACK MainMenuProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    Gdiplus_Startup_Wrapper(); // ?????GDI+
+    Gdiplus_Startup_Wrapper(); // Initialize GDI+
 
 
     wc.lpfnWndProc = MainMenuProc;
@@ -1575,11 +1837,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ng.lpfnWndProc = NewGameProc;
     ng.hInstance = hInstance;
     ng.lpszClassName = L"NewGameWindow";
-    if (!RegisterClass(&ng)) {
-        MessageBox(NULL, L"??????????????????", L"????", MB_ICONERROR | MB_OK);
-        return 1;
-    }
 
+    RegisterClass(&ng);
     RegisterClass(&wc);
 
     hWnd = CreateWindow(wc.lpszClassName, L"Forgotten Realms: Whispers Of Hidden Hoard",
@@ -1630,6 +1889,11 @@ void StartNewGameWindow() {
     UpdateWindow(GameHwnd);
 
     RetroSnake_Initialize(GameHwnd, false, true, 8, 16, 1);
+    static HWND hwndStatic = CreateTransparentStatic(GameHwnd, (HINSTANCE)GetWindowLongPtr(GameHwnd, GWLP_HINSTANCE), L"Hello World", 1024, 0, 256, 800);
+    SetWindowText(hwndStatic, L"Fuck You");
+
+    // 创建一个空的画刷，用于透明背景
+    hBrush = (HBRUSH)GetStockObject(NULL_BRUSH);
     AutoMovingTimer = SetTimer(NULL, 1, AUTO_MOVING_COOLDOWN, (TIMERPROC)Auto_Moving);
     LiquidRefresh = SetTimer(NULL, 1, WATER_REFRESHING_COOLDOWN, (TIMERPROC)Liquid_Refresh_Function);
     LiquidFlowing = SetTimer(NULL, 1, WATER_SPREADING_COOLDOWN, (TIMERPROC)Liquid_Flowing_Function);
