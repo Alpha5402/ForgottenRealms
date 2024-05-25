@@ -6,6 +6,7 @@ using namespace std;
 #define GAME
 
 bool isMouseOverButton[4] = { false, false, false, false };
+int Reward[8] = { 1, 2, 3, 0, 5, 0, 0, 8 };
 
 place head;
 HINSTANCE g_hInstance;
@@ -15,6 +16,7 @@ WNDCLASS sb;
 HWND GameHwnd;
 HWND hWnd;
 HWND Button[4];
+HWND ScoreBoardHwnd;
 RECT ButtonRect[4];
 HBRUSH hBrush;
 HFONT hFont;
@@ -30,6 +32,13 @@ COLORREF Snake_Color;
 COLORREF Food_Color;
 COLORREF Frame_Color;
 COLORREF TextColor;
+
+// Direct2D 启动！
+ID2D1Factory* pD2DFactory = nullptr;
+ID2D1HwndRenderTarget* pRenderTarget = nullptr;
+IDWriteFactory* pDWriteFactory = nullptr;
+IDWriteTextFormat* pTextFormat = nullptr;
+ID2D1SolidColorBrush* pBlackBrush = nullptr;
 
 vector<vector<int>> RetroSnake_Hashes;
 vector<vector<int>> Hash_Temp;
@@ -58,12 +67,19 @@ bool Running;
 int Owe_Length = 0;
 int Max_Owe_Length = 0;
 int Existing_Ores = 0;
+int Max_Score_In_This_Layer = 0;
+int Curr_Score_In_This_Layer = 0;
 int Foods_Amount;
 int Current_Foods_Amount;
 int Length;
+int Depth = 0;
+vector<int> Awards(8, 0);
 int Level = 0;
 int BreakTime;
-double Score;
+int Total_Steps = 0;
+int Max_Steps = 0;
+double Theoretical_Score;
+double Actrual_Score;
 double Multiply;
 bool BannedAutoMoving;
 
@@ -169,49 +185,41 @@ void Draw_Fill_Rect(const HWND hWnd, const RECT Rect, const COLORREF colorBorder
     }
     HBRUSH hOldBrush = static_cast<HBRUSH>(SelectObject(hdc, hBrush));
 
-    // ?????????????????
-    Rectangle(hdc, Rect.left, Rect.top, Rect.right, Rect.bottom); // Rectangle????????????
+    Rectangle(hdc, Rect.left, Rect.top, Rect.right, Rect.bottom); 
 
-    // ???????????????
     SelectObject(hdc, hOldBrush);
     DeleteObject(hBrush);
     SelectObject(hdc, hOldPen);
     DeleteObject(hPen);
 
-    ReleaseDC(hWnd, hdc); // ????豸??????
+    ReleaseDC(hWnd, hdc); 
 }
 
-void Draw_Text(HWND hWnd) {
-    //PAINTSTRUCT ps;
-    //HDC hdc = BeginPaint(hWnd, &ps);
+void Draw_Text(HWND hWnd, bool Using_Dirt_Backpack, int x, int y, Gdiplus::Color color, const wchar_t* Font, int size, const wchar_t *str) {
+    Gdiplus::Graphics graphics(hWnd); // 假设hWnd为窗口句柄
 
-    //if (hdc == NULL) {
-    //    // 错误处理：无法获取设备上下文
-    //    return;
-    //}
+    // 加载并绘制PNG背景
+    if (Using_Dirt_Backpack) {
+        Gdiplus::Image image(L"Blocks/dirt.png");
+        graphics.DrawImage(&image, 0, 0, image.GetWidth(), image.GetHeight());
+        for (int i = 0; i < MAP_WIDTH / IMAGE_SIZE - MAP_WIDTH / IMAGE_SIZE + 8; i++) {
+            for (int j = 0; j < MAP_HEIGHT / IMAGE_SIZE; j++) {
+                graphics.DrawImage(&image, i * IMAGE_SIZE, j * IMAGE_SIZE, image.GetWidth(), image.GetHeight());
+            }
+        }
+    }
 
-    //// 设置字体
-    //HFONT hFont = CreateFont(128, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, ANSI_CHARSET,
-    //    OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-    //    DEFAULT_PITCH | FF_SWISS, L"Arial");
-    //HFONT hOldFont = static_cast<HFONT>(SelectObject(hdc, hFont));
-    //if (hOldFont == NULL || hFont == NULL) {
-    //    // 错误处理：字体选择失败
-    //    DeleteObject(hFont);
-    //    return;
-    //}
+    // 设置文本和笔刷颜色
+    Gdiplus::SolidBrush brush(color); // 白色
 
-    //// 设置文本颜色
-    //SetTextColor(hdc, RGB(0, 0, 0));
-    //SetBkMode(hdc, TRANSPARENT);
+    Gdiplus::Font font(Font, size);
 
-    //// 绘制文本
-    //int flat = TextOutW(hdc, loc.x, loc.y, text, lstrlenW(text)); // 使用lstrlenW获取字符串长度
-
-    //// 清理
-    //SelectObject(hdc, hOldFont); // 还原原来的字体
-    //DeleteObject(hFont);
-    //EndPaint(hWnd, &ps);
+    // 绘制文本
+    graphics.DrawString(
+        str, -1,
+        &font, // 假设已创建Gdiplus::Font对象
+        Gdiplus::PointF(x, y),
+        &brush);
 }
 
 void Flood_Fill(const HWND hWnd, const POINT point, const COLORREF color, const DWORD model) {
@@ -261,6 +269,18 @@ void Draw_Image(HWND hWnd, int x, int y, const wchar_t* imagePath) {
     ReleaseDC(hWnd, hdc);
 }
 
+void Circulate_Draw_Image(HWND hWnd, int x, int y, int max_x, int max_y, const wchar_t* imagePath) {
+    HDC hdc = GetDC(hWnd);
+    Gdiplus::Graphics graphics(hdc);
+
+    Gdiplus::Image image(imagePath);
+    for (int i = x; i < max_x; i++) {
+        for (int j = y; j < max_y; j++) {
+            graphics.DrawImage(&image, i * IMAGE_SIZE, j * IMAGE_SIZE, image.GetWidth(), image.GetHeight());
+        }
+    }
+}
+
 void Play_Media(LPCTSTR pszSound, HMODULE hmod, DWORD fdwSound) {
     PlaySoundW(pszSound, hmod, fdwSound);
     /*
@@ -300,7 +320,8 @@ void RetroSnake_Initialize(HWND hwnd, bool Using_Grid, bool Spawning_Foods, int 
     Foods_Amount = FA;
     Length = Len;
     Level = Lvl;
-    Score = 0;
+    Theoretical_Score = 0;
+    Max_Steps = RELATIVE_WIDTH * RELATIVE_HEIGHT;
     Multiply = 1;
     BackGround_Color = WHITE;
     Grid_Color = RGB(200, 200, 200);
@@ -315,18 +336,13 @@ void RetroSnake_Initialize(HWND hwnd, bool Using_Grid, bool Spawning_Foods, int 
     Forward = '\0';
     RetroSnake_Hashes.resize(RELATIVE_WIDTH + 1, vector<int>(RELATIVE_HEIGHT + 1, 0));
 
-    Image title(L"GAMING.png");
-    for (int i = 0; i < MAP_WIDTH / IMAGE_SIZE - 8; i++) {
-        for (int j = 0; j < MAP_HEIGHT / IMAGE_SIZE; j++) {
-            Draw_Image(hwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
-        }
-    }
-
-    //for (int i = MAP_WIDTH / IMAGE_SIZE - 8; i < MAP_WIDTH / IMAGE_SIZE; i++) {
+    //Image title(L"Global/GAMING.png");
+    //for (int i = 0; i < MAP_WIDTH / IMAGE_SIZE - 8; i++) {
     //    for (int j = 0; j < MAP_HEIGHT / IMAGE_SIZE; j++) {
-    //        Draw_Image(hwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/dirt.png");
+    //        Draw_Image(hwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
     //    }
     //}
+    Circulate_Draw_Image(hwnd, 0, 0, MAP_WIDTH / IMAGE_SIZE - 8, MAP_HEIGHT / IMAGE_SIZE, L"Blocks/stone.png");
 
     Random_Draw_Snake();
     //int temp = 1;
@@ -386,7 +402,6 @@ int Is_Liquid(int Hash_Value) {
     return 0;
 }
 int Is_Water(place loc) {
-    
     if (WITHIN_CLOSED_OPEN_INTERVAL(RetroSnake_Hashes[loc.x][loc.y], 20000, 30000)) {
         return (RetroSnake_Hashes[loc.x][loc.y] % 20000) / 100 + 1;
     }
@@ -460,6 +475,7 @@ void Foods_Create(int type, int max) {
         food.y = Random(1, RELATIVE_HEIGHT - 2);
         //int type = value;
         if (RetroSnake_Hashes[food.x][food.y] == 0 && Adjacent_Unit_Amount(food, 0) > 3) {
+            Max_Score_In_This_Layer += Reward[type];
             Draw_Image(GameHwnd, food.x * IMAGE_SIZE, food.y * IMAGE_SIZE, aw[type]);
             RetroSnake_Hashes[food.x][food.y] = 10 + type;
             break;
@@ -478,6 +494,7 @@ void Foods_Create(int* queue, int max) {
         int type = queue[T];
 
         if (RetroSnake_Hashes[food.x][food.y] == 0 && Adjacent_Unit_Amount(food, 0) > 3) {
+            Max_Score_In_This_Layer += Reward[type];
             Draw_Image(GameHwnd, food.x * IMAGE_SIZE, food.y * IMAGE_SIZE, aw[type]);
             RetroSnake_Hashes[food.x][food.y] = 10 + type;
             break;
@@ -489,30 +506,23 @@ void Foods_Create(int* queue, int max) {
 }
 void Foods_Create(place loc, int type) {
     if (RetroSnake_Hashes[loc.x][loc.y] == 0 && Adjacent_Unit_Amount(loc, 0) > 3) {
+        Max_Score_In_This_Layer += Reward[type];
         Draw_Image(GameHwnd, loc.x * IMAGE_SIZE, loc.y * IMAGE_SIZE, aw[type]);
         RetroSnake_Hashes[loc.x][loc.y] = 10 + type;
     }
 }
 
 void Foods_Spawn(int Amount) {
+    //Max_Score_In_This_Layer = 0;
     Current_Foods_Amount = Amount;
     for (int i = 0; i < Foods_Amount; i++) {
-        int queue[5] = { 0, 1, 2, 4, 7 };
-        Foods_Create(queue, 5);
+        int queue[6] = { 0, 1, 2, 4, 5, 7 };
+        Foods_Create(queue, 6);
     }
     if (Level >= 3) {
         int amount = Random(1, 2);
         for (int i = 0; i <= amount; i++) {
             Foods_Create(3, 1);
-        }
-    }
-    if (Level >= 4) {
-        int amount = Random(1, 2);
-        for (int i = 0; i <= amount; i++) {
-            int roll = Random(0, 100);
-            if (roll < 50) {
-                Foods_Create(5, 1);
-            }
         }
     }
     if (Level >= 5) {
@@ -825,7 +835,12 @@ void Lengthen(place source, place target, COLORREF GridColor, COLORREF InsideCol
 }
 
 void Shorten(int begin) {
-    
+    // Need to debug
+    if (Length < begin and Owe_Length) {
+        Owe_Length -= begin;
+        return;
+    }
+
     if (begin >= SnakePlace.size() - 1) { 
         begin = SnakePlace.size() - 1; 
         Draw_Image(GameHwnd, SnakePlace[0].x * IMAGE_SIZE, SnakePlace[0].y * IMAGE_SIZE, L"Snake_Head.png");
@@ -859,12 +874,8 @@ void Moving_Upward(bool lengthen, int type = -1) {
 
         RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y] = 1;
         SnakePlace[0].y--;
-        Eating(type);
-
-        if (Length > 2)
-            Check_Snake_To_Update(GameHwnd, SnakePlace[1], SnakePlace[2], SnakePlace[0]);
-        Update_Snake_Head(GameHwnd);
-        Update_Snake_Rail(GameHwnd);
+        if (WITHIN_CLOSED_INTERVAL(type, 10, 20))
+            Eating(type);
     }
     else {
         RetroSnake_Hashes[SnakePlace[SnakePlace.size() - 1].x][SnakePlace[SnakePlace.size() - 1].y] = -1;
@@ -889,7 +900,8 @@ void Moving_Downward(bool lengthen, int type = -1) {
         }
         RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y] = 1;
         SnakePlace[0].y++;
-        Eating(type);
+        if (WITHIN_CLOSED_INTERVAL(type, 10, 20))
+            Eating(type);
     }
     else {
         RetroSnake_Hashes[SnakePlace[SnakePlace.size() - 1].x][SnakePlace[SnakePlace.size() - 1].y] = -1;
@@ -914,7 +926,8 @@ void Moving_Left(bool lengthen, int type = -1) {
         }
         RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y] = 1;
         SnakePlace[0].x--;
-        Eating(type);
+        if (WITHIN_CLOSED_INTERVAL(type, 10, 20))
+            Eating(type);
     }
     else {
         RetroSnake_Hashes[SnakePlace[SnakePlace.size() - 1].x][SnakePlace[SnakePlace.size() - 1].y] = -1;
@@ -939,7 +952,8 @@ void Moving_Right(bool lengthen, int type = -1) {
         }
         RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y] = 1;
         SnakePlace[0].x++;
-        Eating(type);
+        if (WITHIN_CLOSED_INTERVAL(type, 10, 20))
+            Eating(type);
     }
     else {
         RetroSnake_Hashes[SnakePlace[SnakePlace.size() - 1].x][SnakePlace[SnakePlace.size() - 1].y] = -1;
@@ -1041,7 +1055,7 @@ void Water_Spreading() {
                                 Liq[i + 1].insert(std::pair<place, int>({ new_x, new_y }, Type));
                                 RetroSnake_Hashes[new_x][new_y] = 20000 + distance * 100 + 100;
                                 Draw_Image(GameHwnd, new_x * IMAGE_SIZE, new_y * IMAGE_SIZE, L"Blocks/Stone_Dark.png");
-                                Draw_Image(GameHwnd, new_x * IMAGE_SIZE, new_y * IMAGE_SIZE, KidsLavaList[9][i]);
+                                Draw_Image(GameHwnd, new_x * IMAGE_SIZE, new_y * IMAGE_SIZE, KidsLavaList[0][i]);
                             }
                         }
                         else if (Type == 2) {
@@ -1135,7 +1149,8 @@ void Blocks_Drying() {
     }
 }
 
-void KeyBoard_Input(int userKey) {
+int KeyBoard_Input(int userKey, bool Passive) {
+    int value = 0;
     switch (userKey)
     {
     case 'w':
@@ -1145,9 +1160,9 @@ void KeyBoard_Input(int userKey) {
             if (Owe_Length) {
                 if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] <= 0) {
                     Owe_Length--;
-                    Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
+                    Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] );
                 }
-                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10000) {
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10000 and Passive) {
                     Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
                     Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
                     Check_Drying_Blocks();
@@ -1157,13 +1172,13 @@ void KeyBoard_Input(int userKey) {
                     Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
                 else {
                     cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y - 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] << endl;
-                    GameOver();
+                    return 0;
                 }
             }
             else {
                 if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] <= 0)
                     Moving_Upward(false);
-                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10000) {
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10000 and Passive) {
                     Moving_Upward(false);
                     Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
                     Check_Drying_Blocks();
@@ -1172,10 +1187,11 @@ void KeyBoard_Input(int userKey) {
                     Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
                 else {
                     cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y - 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] << endl;
-                    GameOver();
+                    return 0;
                 }
             }
-
+            Total_Steps++;
+            value = 1;
         }
         else GameOver();
         break;
@@ -1189,7 +1205,7 @@ void KeyBoard_Input(int userKey) {
                     Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
                     Owe_Length--;
                 }
-                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10000) {
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10000 and Passive) {
                     Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
                     Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
                     Check_Drying_Blocks();
@@ -1199,14 +1215,13 @@ void KeyBoard_Input(int userKey) {
                     Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
                 else {
                     cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y + 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] << endl;
-                    GameOver();
+                    return 0;
                 }
             }
             else {
                 if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] <= 0)
                     Moving_Downward(false);
-                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10000) {
-                    //LiquidClearAccordingCoordinate(DOWN(SnakePlace[0]));
+                else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10000 and Passive) {
                     Moving_Downward(false);
                     Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
                     Check_Drying_Blocks();
@@ -1215,9 +1230,11 @@ void KeyBoard_Input(int userKey) {
                     Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
                 else {
                     cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y + 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] << endl;
-                    GameOver();
+                    return 0;
                 }
             }
+            Total_Steps++;
+            value = 1;
         }  
         else GameOver();
         break;
@@ -1231,7 +1248,7 @@ void KeyBoard_Input(int userKey) {
                     Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
                     Owe_Length--;
                 }
-                else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10000) {
+                else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10000 and Passive) {
                     Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
                     Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
                     Check_Drying_Blocks();
@@ -1241,13 +1258,13 @@ void KeyBoard_Input(int userKey) {
                     Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
                 else {
                     cout << "You dead in " << SnakePlace[0].x - 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] << endl;
-                    GameOver();
+                    return 0;
                 }
             }
             else {
                 if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] <= 0)
                     Moving_Left(false);
-                else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10000) {
+                else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10000 and Passive) {
                     Moving_Left(false);
                     Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
                     Check_Drying_Blocks();
@@ -1256,10 +1273,11 @@ void KeyBoard_Input(int userKey) {
                     Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
                 else {
                     cout << "You dead in " << SnakePlace[0].x - 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] << endl;
-                    GameOver();
+                    return 0;
                 }
             }
-
+            Total_Steps++;
+            value = 1;
         }
         else GameOver();
         break;
@@ -1267,13 +1285,13 @@ void KeyBoard_Input(int userKey) {
     case 'd':
     case 'D':
     case -77: {
-        if (SnakePlace[0].x < RELATIVE_WIDTH - 2) {
+        if (SnakePlace[0].x < RELATIVE_WIDTH - 1) {
             if (Owe_Length) {
                 if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] <= 0) {
                     Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
                     Owe_Length--;
                 }
-                else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10000) {
+                else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10000 and Passive) {
                     Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
                     Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
                     Check_Drying_Blocks();
@@ -1283,13 +1301,13 @@ void KeyBoard_Input(int userKey) {
                     Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
                 else {
                     cout << "You dead in " << SnakePlace[0].x + 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] << endl;
-                    GameOver();
+                    return 0;
                 }
             }
             else {
                 if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] <= 0)
                     Moving_Right(false);
-                else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10000) {
+                else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10000 and Passive) {
                     Moving_Right(false);
                     Water_Clear({ SnakePlace[0].x, SnakePlace[0].y });
                     Check_Drying_Blocks();
@@ -1298,25 +1316,17 @@ void KeyBoard_Input(int userKey) {
                     Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
                 else {
                     cout << "You dead in " << SnakePlace[0].x + 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] << endl;
-                    GameOver();
+                    return 0;
                 }
             }
-
+            Total_Steps++;
+            value = 1;
         }
         else GameOver();
         break;
     }
-
     }
-}
-
-void Auto_Moving() {
-    while (Running) {
-        KeyBoard_Input(Forward);
-        //if (Running)
-        //    Message_Renovate();
-        Sleep(BreakTime);
-    }
+    return value;
 }
 
 void GameOver() {
@@ -1369,56 +1379,30 @@ void RetroSnake_Hashes_Info() {
 
 void Eating(int type) {
     //strcpy(str_latest, "Mining!");
-    switch (type) {
-        case 10:
-            Current_Foods_Amount--;
-            Score += 1;
-            break;
-        case 11: {
-            Current_Foods_Amount--;
-            Score += 2;
-            break;
-        }
-        case 12: {
-            Current_Foods_Amount--;
-            Score += 3;
-            break;
-        }
-        case 13: {
-            Shorten(3);
-            break;
-        }
-        case 14: {
-            Current_Foods_Amount--;
-            Score += 5;
-            break;
-        }
-        case 15: {
-            Shorten(5);
-            break;
-        }
-        case 16: {
-            Shorten(SnakePlace.size() - 3);
-            break;
-        }
-        case 17: {
-            Current_Foods_Amount--;
-            Score += 8;
-            break;
-        }
-    }
+    Current_Foods_Amount--;
+    Awards[type - 10]++;
+    Theoretical_Score += Reward[type - 10];
+    Curr_Score_In_This_Layer += Reward[type - 10];
+    
+    if (type == 13)
+        Shorten(3);
+    else if (type == 15)
+        Awards[type - 10] += Random(3, 8);
+    else if (type == 16)
+        Shorten(SnakePlace.size() - 3);
 
-
-    if (!Current_Foods_Amount)
-        Level_Up();
-
-    //Message_Renovate();
+    Refresh_ScoreBoard(type - 10);
 }
 
 void Level_Up() {
     Level++;
+    Depth++;
+    Refresh_ScoreBoard(8);
+
     BreakTime *= 0.8;
-    Multiply += 0.5;
+    if (Curr_Score_In_This_Layer * 2 >= Max_Score_In_This_Layer)
+        Max_Steps += RELATIVE_WIDTH * RELATIVE_HEIGHT;
+    //Multiply += 0.5;
     for(int i = 0; i < Liq.size(); i++)
         Liq[i].clear();
     unordered_map<place, int> Temp_Map(ObstacleAbove);
@@ -1434,7 +1418,8 @@ void Level_Up() {
     for (int i = 0; i < temp; i++) {
         Random_Draw_Obstacle();
     }
-
+    Curr_Score_In_This_Layer = 0;
+    Max_Score_In_This_Layer = 0;
     Foods_Spawn(Foods_Amount - Existing_Ores);
 }
 
@@ -1527,19 +1512,19 @@ void Inherit(unordered_map<place, int> temp) {
                 }
             }
             else if (Is_Water({ i, j })) {
-                RetroSnake_Hashes[i][j] = 20099;
+                RetroSnake_Hashes[i][j] = -2;
                 Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
                 Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/Stone_Under_Water.png");
                 ObstacleAbove.insert(std::pair<place, int>({i, j}, 2));
             }
             else if (Is_Lava({ i, j })) {
-                RetroSnake_Hashes[i][j] = 10099;
+                RetroSnake_Hashes[i][j] = -2;
                 Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
                 Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/Stone_Under_Lava.png");
                 ObstacleAbove.insert(std::pair<place, int>({ i, j }, 1));
             }
             else if (Is_Gravel({ i, j })) {
-                RetroSnake_Hashes[i][j] = 30099;
+                RetroSnake_Hashes[i][j] = -2;
                 Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/stone.png");
                 Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/Stone_Under_Gravel.png");
                 ObstacleAbove.insert(std::pair<place, int>({ i, j }, 3));
@@ -1559,7 +1544,6 @@ void Clear_Windows() {
     }
 }
 
-// GDI+ Initialization
 void Gdiplus_Startup_Wrapper() {
     Gdiplus::GdiplusStartupInput gdiplusStartupInput;
     Gdiplus::GdiplusStartup(&g_gdiplusToken, &gdiplusStartupInput, NULL);
@@ -1574,55 +1558,274 @@ void Water_Vertical_Flow() {
         if (RetroSnake_Hashes[it->first.x][it->first.y] == -1) {
             RetroSnake_Hashes[it->first.x][it->first.y] = it->second * 10000;
             switch (it->second) {
-            case 1: Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, L"Lava/Lava_1.png"); break;
-            case 2: Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, L"Water_Still/Water_Still_1.png"); break;
-            case 3: Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, L"Blocks/Gravel.png"); break;
+            case 1: {
+                Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, L"Lava/Lava_1.png"); 
+                
+                break; 
             }
-            
-            Liq[0].insert(std::pair<place, int>(it->first, it->second));
+            case 2: {
+                Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, L"Water_Still/Water_Still_1.png"); 
+                Liq[0].insert(std::pair<place, int>(it->first, it->second));
+                break; 
+            }
+            case 3: {
+                Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, L"Blocks/Gravel.png");
+                it = ObstacleAbove.erase(it);
+                break;
+            }
+            }
         }
     }
 }
 
-HWND CreateTransparentStatic(HWND hwndParent, HINSTANCE hInstance, const wchar_t* text, int x, int y, int width, int height) {
-    HWND hwndStatic = CreateWindowEx(
-        0,
-        L"STATIC",
-        text,
-        WS_VISIBLE | WS_CHILD | SS_CENTER,
-        x, y, width, height,
-        hwndParent,
-        NULL,
-        hInstance,
-        NULL);
+void InitD2D(HWND hwnd) {
+    // 创建D2D工厂
+    D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, &pD2DFactory);
 
-    for (int i = 0; i < MAP_WIDTH / IMAGE_SIZE - MAP_WIDTH / IMAGE_SIZE + 8; i++) {
-        for (int j = 0; j < MAP_HEIGHT / IMAGE_SIZE; j++) {
-            Draw_Image(hwndStatic, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/dirt.png");
-        }
+    // 获取窗口大小
+    RECT rc;
+    GetClientRect(hwnd, &rc);
+
+    // 创建渲染目标
+    pD2DFactory->CreateHwndRenderTarget(
+        D2D1::RenderTargetProperties(),
+        D2D1::HwndRenderTargetProperties(
+            hwnd, D2D1::SizeU(rc.right - rc.left, rc.bottom - rc.top)),
+        &pRenderTarget);
+
+    // 创建DWrite工厂
+    DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), reinterpret_cast<IUnknown**>(&pDWriteFactory));
+
+    // 创建文本格式
+    pDWriteFactory->CreateTextFormat(
+        L"Gabriola",                // 字体名称
+        nullptr,                    // 字体集合
+        DWRITE_FONT_WEIGHT_REGULAR, // 字体粗细
+        DWRITE_FONT_STYLE_NORMAL,   // 字体样式
+        DWRITE_FONT_STRETCH_NORMAL, // 字体拉伸
+        50.0f,                      // 字体大小
+        L"en-us",                   // 本地化
+        &pTextFormat);
+
+    // 创建画刷
+    pRenderTarget->CreateSolidColorBrush(
+        D2D1::ColorF(D2D1::ColorF::Black),
+        &pBlackBrush);
+}
+
+void CleanupD2D() {
+    if (pBlackBrush) pBlackBrush->Release();
+    if (pTextFormat) pTextFormat->Release();
+    if (pDWriteFactory) pDWriteFactory->Release();
+    if (pRenderTarget) pRenderTarget->Release();
+    if (pD2DFactory) pD2DFactory->Release();
+}
+
+void OnPaint(HWND hwnd) {
+    if (pRenderTarget == nullptr) {
+        // 如果渲染目标没有创建成功，直接返回
+        return;
     }
 
-    // 创建自定义字体
-    hFont = CreateFont(
-        24,                        // 字体高度
-        0,                         // 字体宽度
-        0,                         // 字体倾斜角度
-        0,                         // 字体方向角度
-        FW_BOLD,                   // 字体重量
-        FALSE,                     // 斜体
-        FALSE,                     // 下划线
-        FALSE,                     // 删除线
-        ANSI_CHARSET,              // 字符集
-        OUT_DEFAULT_PRECIS,        // 输出精度
-        CLIP_DEFAULT_PRECIS,       // 裁剪精度
-        DEFAULT_QUALITY,           // 输出质量
-        DEFAULT_PITCH | FF_SWISS,  // 字体族和间距
-        L"Arial");                  // 字体名称
+    PAINTSTRUCT ps;
+    BeginPaint(hwnd, &ps);
 
-    // 将自定义字体应用到静态控件
-    SendMessage(hwndStatic, WM_SETFONT, (WPARAM)hFont, TRUE);
+    pRenderTarget->BeginDraw();
 
-    return hwndStatic;
+    pRenderTarget->Clear(D2D1::ColorF(D2D1::ColorF::Red, 0.0f));
+
+    // 设置文本的颜色
+    //ComPtr<ID2D1SolidColorBrush> pBrush;
+    //pRenderTarget->CreateSolidColorBrush(
+    //    D2D1::ColorF(D2D1::ColorF::White),
+    //    &pBrush);
+    // 创建一个矩形区域作为文本的背景
+    D2D1_RECT_F backgroundRect = D2D1::RectF(0, 0, 272, 600);
+
+    // 创建画刷并设置为半透明黑色
+    ID2D1SolidColorBrush* pTransparentBlackBrush;
+    pRenderTarget->CreateSolidColorBrush(D2D1::ColorF(RGB(0, 0, 0)), &pTransparentBlackBrush);
+
+    // 绘制文本背景
+    pRenderTarget->FillRectangle(&backgroundRect, pTransparentBlackBrush);
+
+    // 释放画刷
+    pTransparentBlackBrush->Release();
+
+    // 创建一个矩形区域
+    D2D1_RECT_F layoutRect = D2D1::RectF(0, 0, 272, 600);
+
+    // 绘制文本
+    pRenderTarget->DrawText(
+        L"Hello, Direct2D!",        // 文本
+        wcslen(L"Hello, Direct2D!"),// 文本长度
+        pTextFormat,                // 文本格式
+        layoutRect,                 // 布局矩形
+        pBlackBrush);               // 画刷
+
+    HRESULT hr = pRenderTarget->EndDraw();
+    if (FAILED(hr)) {
+        MessageBox(hwnd, L"Failed to draw text", L"Error", MB_OK);
+    }
+
+    EndPaint(hwnd, &ps);
+}
+
+void Refresh_ScoreBoard(int Type) {
+    switch (Type) {
+    case -1: {
+        Draw_Image(ScoreBoardHwnd, 16, 32, L"Ores/coal.png");
+        char coal[256] = "\0";
+        sprintf(coal, "%d", Awards[0]);
+        wchar_t wcoal[256];
+        mbstowcs(wcoal, coal, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 32 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wcoal);
+
+        Draw_Image(ScoreBoardHwnd, 16, 64, L"Ores/copper_ingot.png");
+        char copper[256] = "\0";
+        sprintf(copper, "%d", Awards[0]);
+        wchar_t wcopper[256];
+        mbstowcs(wcopper, copper, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 64 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wcopper);
+
+        Draw_Image(ScoreBoardHwnd, 16, 96, L"Ores/iron_ingot.png");
+        char iron[256] = "\0";
+        sprintf(iron, "%d", Awards[0]);
+        wchar_t wiron[256];
+        mbstowcs(wiron, iron, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 96 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wiron);
+
+        Draw_Image(ScoreBoardHwnd, 16, 128, L"Ores/gold_ingot.png");
+        char gold[256] = "\0";
+        sprintf(gold, "%d", Awards[0]);
+        wchar_t wgold[256];
+        mbstowcs(wgold, gold, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 128 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wgold);
+
+        Draw_Image(ScoreBoardHwnd, 16, 160, L"Ores/lapis_lazuli.png");
+        char lapis[256] = "\0";
+        sprintf(lapis, "%d", Awards[0]);
+        wchar_t wlapis[256];
+        mbstowcs(wlapis, lapis, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 160 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wlapis);
+
+        Draw_Image(ScoreBoardHwnd, 16, 192, L"Ores/diamond.png");
+        char diamond[256] = "\0";
+        sprintf(diamond, "%d", Awards[0]);
+        wchar_t wdiamond[256];
+        mbstowcs(wdiamond, diamond, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 192 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wdiamond);
+
+        char depth[256] = "\0";
+        sprintf(depth, "%d", Depth);
+        wchar_t wdepth[256];
+        mbstowcs(wdepth, depth, 256);
+        Draw_Text(ScoreBoardHwnd, false, 8, 320 + 32, Color(255, 255, 255, 255), L"Monaco", 16, wdepth);
+        break;
+    }
+    case 0: {
+        for (int i = 0; i < 6; i++) {
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 1 * IMAGE_SIZE, L"Blocks/dirt.png");
+        }
+        char coal[256] = "\0";
+        sprintf(coal, "%d", Awards[0]);
+        wchar_t wcoal[256];
+        mbstowcs(wcoal, coal, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 32 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wcoal);
+        break;
+        //Actrual_Score
+    }
+    case 1: {
+        for (int i = 0; i < 6; i++) {
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 2 * IMAGE_SIZE, L"Blocks/dirt.png");
+        }
+        char copper[256] = "\0";
+        sprintf(copper, "%d", Awards[1]);
+        wchar_t wcopper[256];
+        mbstowcs(wcopper, copper, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 64 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wcopper);
+        break;
+    }
+    case 2: {
+        for (int i = 0; i < 6; i++) {
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 3 * IMAGE_SIZE, L"Blocks/dirt.png");
+        }
+        char iron[256] = "\0";
+        sprintf(iron, "%d", Awards[2]);
+        wchar_t wiron[256];
+        mbstowcs(wiron, iron, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 96 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wiron);
+        break;
+    }
+    case 4: {
+        for (int i = 0; i < 6; i++) {
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 4 * IMAGE_SIZE, L"Blocks/dirt.png");
+        }
+        char gold[256] = "\0";
+        sprintf(gold, "%d", Awards[4]);
+        wchar_t wgold[256];
+        mbstowcs(wgold, gold, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 128 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wgold);
+        break;
+    }
+    case 5: {
+        for (int i = 0; i < 6; i++) {
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 5 * IMAGE_SIZE, L"Blocks/dirt.png");
+        }
+        char lapis[256] = "\0";
+        sprintf(lapis, "%d", Awards[5]);
+        wchar_t wlapis[256];
+        mbstowcs(wlapis, lapis, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 160 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wlapis);
+        break;
+    }
+    case 7: {
+        for (int i = 0; i < 6; i++) {
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 6 * IMAGE_SIZE, L"Blocks/dirt.png");
+        }
+        char diamond[256] = "\0";
+        sprintf(diamond, "%d", Awards[7]);
+        wchar_t wdiamond[256];
+        mbstowcs(wdiamond, diamond, 256);
+        Draw_Text(ScoreBoardHwnd, false, 64, 192 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wdiamond);
+        break;
+    }
+    case 8: {
+        for (int i = 0; i < 8; i++) {
+            Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 11 * IMAGE_SIZE, L"Blocks/dirt.png");
+        }
+        char depth[256] = "\0";
+        sprintf(depth, "%d", Depth);
+        wchar_t wdepth[256];
+        mbstowcs(wdepth, depth, 256);
+        Draw_Text(ScoreBoardHwnd, false, 8, 320 + 32, Color(255, 255, 255, 255), L"Monaco", 16, wdepth);
+        break;
+    }
+    }
+    for (int i = 0; i < 8; i++) {
+        Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 9 * IMAGE_SIZE, L"Blocks/dirt.png");
+    }
+
+    char ac[256] = "\0";
+    if (Total_Steps != 0)
+        Actrual_Score = (Theoretical_Score * Max_Steps) / (Total_Steps * 5);
+    sprintf(ac, "%.2lf", Actrual_Score);
+    wchar_t wac[256];
+    mbstowcs(wac, ac, 256);
+    Draw_Text(ScoreBoardHwnd, false, 8, 256 + 32, Color(255, 255, 255, 255), L"Monaco", 16, wac);
+}
+
+void ScoreBoard_Painting() {
+    Draw_Text(ScoreBoardHwnd, true, 56, 0, Color(255, 255, 255, 255), L"Monaco", 16, L"Hello World");
+    Refresh_ScoreBoard(-1);
+
+    Draw_Text(ScoreBoardHwnd, false, 64 - 8, 256, Color(255, 255, 255, 255), L"Monaco", 16, L"Total Score");
+    Draw_Text(ScoreBoardHwnd, false, 64 - 10, 320, Color(255, 255, 255, 255), L"Monaco", 16, L"Current Depth");
+
+    for (int i = 0; i < 160; i += 16) {
+        Draw_Image(ScoreBoardHwnd, 8 + i, 512, L"Health.png");
+    }
+    
 }
 
 VOID CALLBACK Liquid_Flowing_Function(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
@@ -1634,7 +1837,7 @@ VOID CALLBACK Liquid_Flowing_Function(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DW
 VOID CALLBACK Auto_Moving(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
     if (BannedAutoMoving == false)
         if (Forward != '\0')
-            KeyBoard_Input(Forward);
+            KeyBoard_Input(Forward, true);
 }
 
 VOID CALLBACK Liquid_Refresh_Function(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
@@ -1680,18 +1883,6 @@ LRESULT CALLBACK NewGameProc(HWND GamehWnd, UINT message, WPARAM wParam, LPARAM 
     static HWND hwndStatic;
     static HBRUSH hBrush = NULL;
     switch (message) {
-    case WM_CTLCOLORSTATIC: {
-        // 设置静态控件的背景为透明
-        HDC hdcStatic = (HDC)wParam;
-        SetBkMode(hdcStatic, TRANSPARENT);
-        SetTextColor(hdcStatic, RGB(0, 0, 0)); // 设置文本颜色为黑色
-
-        // 返回窗口的背景画刷，以便静态控件使用窗口的背景颜色
-        //if (!hBrush) {
-            hBrush = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
-        //}
-        return (LRESULT)hBrush;
-    }
     case WM_CLOSE:
         DestroyWindow(GamehWnd);
         return 0;
@@ -1701,6 +1892,7 @@ LRESULT CALLBACK NewGameProc(HWND GamehWnd, UINT message, WPARAM wParam, LPARAM 
         }
         ShowWindow(hWnd, SW_SHOW);
         RetroSnake_Destruction();
+        CleanupD2D();
         break;
     case WM_KEYDOWN: {
         char FLAG = '\0';
@@ -1734,10 +1926,12 @@ LRESULT CALLBACK NewGameProc(HWND GamehWnd, UINT message, WPARAM wParam, LPARAM 
         }
         if (!Invaild) {
             Forward = FLAG;
-            KeyBoard_Input(FLAG);
-            KillTimer(NULL, AutoMovingTimer);
+            int value = KeyBoard_Input(FLAG, false);
+            if (value) {
+                KillTimer(NULL, AutoMovingTimer);
+                AutoMovingTimer = SetTimer(NULL, 1, AUTO_MOVING_COOLDOWN, (TIMERPROC)Auto_Moving);
+            }
 
-            AutoMovingTimer = SetTimer(NULL, 1, AUTO_MOVING_COOLDOWN, (TIMERPROC)Auto_Moving);
             break;
         }
     }
@@ -1883,17 +2077,17 @@ void StartNewGameWindow() {
     GameHwnd = CreateWindow(ng.lpszClassName, L"Forgotten Realms: Whispers Of Hidden Hoard",
         WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME, CW_USEDEFAULT, CW_USEDEFAULT,
         MAP_WIDTH, MAP_HEIGHT, NULL, NULL, wc.hInstance, NULL);
+    ScoreBoardHwnd = CreateWindow(TEXT("BUTTON"), TEXT("??????"), WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
+        1024, 0, 272, 896, GameHwnd, NULL, ng.hInstance, NULL);
 
     ShowWindow(GameHwnd, SW_SHOW);
+
     ShowWindow(hWnd, SW_HIDE);
     UpdateWindow(GameHwnd);
 
     RetroSnake_Initialize(GameHwnd, false, true, 8, 16, 1);
-    static HWND hwndStatic = CreateTransparentStatic(GameHwnd, (HINSTANCE)GetWindowLongPtr(GameHwnd, GWLP_HINSTANCE), L"Hello World", 1024, 0, 256, 800);
-    SetWindowText(hwndStatic, L"Fuck You");
+    ScoreBoard_Painting();
 
-    // 创建一个空的画刷，用于透明背景
-    hBrush = (HBRUSH)GetStockObject(NULL_BRUSH);
     AutoMovingTimer = SetTimer(NULL, 1, AUTO_MOVING_COOLDOWN, (TIMERPROC)Auto_Moving);
     LiquidRefresh = SetTimer(NULL, 1, WATER_REFRESHING_COOLDOWN, (TIMERPROC)Liquid_Refresh_Function);
     LiquidFlowing = SetTimer(NULL, 1, WATER_SPREADING_COOLDOWN, (TIMERPROC)Liquid_Flowing_Function);

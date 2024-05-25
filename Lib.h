@@ -16,6 +16,11 @@
 #include <commctrl.h>
 #include <unordered_map>
 #include <mmsystem.h>
+// Direct2D Æô¶¯£¡
+#include <d2d1.h>
+#include <dwrite.h>
+#pragma comment(lib, "d2d1")
+#pragma comment(lib, "dwrite")
 
 struct place {
     int x;
@@ -59,10 +64,10 @@ namespace std {
 #define WATER_SPREADING_COOLDOWN 600
 #define WATER_REFRESHING_COOLDOWN 200
 
-#define WITHIN_OPEN_INTERVAL(a, b, c) a > b and a < c
-#define WITHIN_CLOSED_INTERVAL(a, b, c) a >= b and a <= c
-#define WITHIN_OPEN_CLOSED_INTERVAL(a, b, c) a > b and a <= c
-#define WITHIN_CLOSED_OPEN_INTERVAL(a, b, c) a >= b and a < c
+#define WITHIN_OPEN_INTERVAL(a, b, c) ((a) > (b) && (a) < (c))
+#define WITHIN_CLOSED_INTERVAL(a, b, c) ((a) >= (b) && (a) <= (c))
+#define WITHIN_OPEN_CLOSED_INTERVAL(a, b, c) ((a) > (b) && (a) <= (c))
+#define WITHIN_CLOSED_OPEN_INTERVAL(a, b, c) ((a) >= (b) && (a) < (c))
 
 struct pathfinding {
     int forward;

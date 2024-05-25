@@ -1,7 +1,11 @@
 #pragma once
-#define ORES { L"Blocks/Ores/coal_ore.png", L"Blocks/Ores/copper_ore.png", L"Blocks/Ores/iron_ore.png", \
-    L"Blocks/Ores/redstone_ore.png", L"Blocks/Ores/gold_ore.png", L"Blocks/Ores/lapis_ore.png", \
-    L"Blocks/Ores/emerald_ore.png", L"Blocks/Ores/diamond_ore.png" }
+#define ORES { L"Ores/coal_ore.png", L"Ores/copper_ore.png", L"Ores/iron_ore.png", \
+    L"Ores/redstone_ore.png", L"Ores/gold_ore.png", L"Ores/lapis_ore.png", \
+    L"Ores/emerald_ore.png", L"Ores/diamond_ore.png" }
+
+#define AWARDS { L"Ores/coal.png", L"Ores/copper_ingot.png", L"Ores/iron_ingot.png", \
+    L"", L"Ores/gold_ingot.png", L"Ores/lapis_lazuli.png", \
+    L"", L"Ores/diamond_ore.png" }
 
 #define BUTTON_LIST  { { L"Buttons/Button_GameStart_Actived.png", L"Buttons/Button_GameStart_Non-Actived.png" },  \
     { L"Buttons/Button_ScoreBoard_Actived.png", L"Buttons/Button_ScoreBoard_Non-Actived.png" }, \
