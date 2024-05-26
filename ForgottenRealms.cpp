@@ -6,18 +6,24 @@ using namespace std;
 #define GAME
 
 bool isMouseOverButton[4] = { false, false, false, false };
+bool isMouseOverSettingsButton[4] = { false, false, false, false };
 int Reward[8] = { 1, 2, 3, 0, 5, 0, 0, 8 };
 
 place head;
 HINSTANCE g_hInstance;
 WNDCLASS wc;
 WNDCLASS ng;
-WNDCLASS sb;
+WNDCLASS settings;
+WNDCLASS nh;
 HWND GameHwnd;
 HWND hWnd;
 HWND Button[4];
+HWND Settings_Button[4];
 HWND ScoreBoardHwnd;
+HWND SettingsHwnd;
+HWND NameHwnd;
 RECT ButtonRect[4];
+RECT Settings_Button_Rect[4];
 HBRUSH hBrush;
 HFONT hFont;
 UINT_PTR AutoMovingTimer;
@@ -56,7 +62,19 @@ const wchar_t* LavaList[19] = LAVA_LIST;
 const wchar_t* WaterList[32] = WATER_LIST;
 const wchar_t* KidsWaterList[16][7] = KIDS_WATER_LIST;
 const wchar_t* KidsLavaList[8][3] = KIDS_LAVA_LIST;
+const wchar_t* Setting_Buttons_List[4] = SETTING_LIST;
+const BUTTON MusicList[8] = MUSIC_LIST;
+const BUTTON SpeedList[3] = SPEED_LIST;
+const BUTTON ModeList[2] = MODE_LIST;
+int Music = 0;
+int Speed = 0;
+int Mode = 0;
+int Health;
 const Media MediaList[6] = MEDIA_LIST;
+WCHAR Name[256];
+
+int Auto_Moving_Cooldown[3] = { AUTO_MOVING_COOLDOWN , AUTO_MOVING_COOLDOWN * 1.5, AUTO_MOVING_COOLDOWN / 2 };
+
 
 Image* buttonNormalImage = nullptr;
 Image* buttonActiveImage = nullptr;
@@ -78,10 +96,13 @@ int Level = 0;
 int BreakTime;
 int Total_Steps = 0;
 int Max_Steps = 0;
+int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+int screenHeight = GetSystemMetrics(SM_CYSCREEN);
 double Theoretical_Score;
 double Actrual_Score;
 double Multiply;
 bool BannedAutoMoving;
+bool Settings_Init = false;
 
 place Translate(int x, int y) {
     place temp;
@@ -269,6 +290,19 @@ void Draw_Image(HWND hWnd, int x, int y, const wchar_t* imagePath) {
     ReleaseDC(hWnd, hdc);
 }
 
+void Draw_Image_Twice(HWND hWnd, int x, int y, const wchar_t* first_imagePath, const wchar_t* second_imagePath) {
+    HDC hdc = GetDC(hWnd);
+
+    Gdiplus::Graphics graphics(hdc);
+    Gdiplus::Image fimage(first_imagePath);
+    Gdiplus::Image simage(second_imagePath);
+    Gdiplus::RectF frect(x, y, fimage.GetWidth(), fimage.GetHeight());
+    Gdiplus::RectF srect(x, y, simage.GetWidth(), simage.GetHeight());
+    graphics.DrawImage(&fimage, frect);
+    graphics.DrawImage(&simage, srect);
+    ReleaseDC(hWnd, hdc);
+}
+
 void Circulate_Draw_Image(HWND hWnd, int x, int y, int max_x, int max_y, const wchar_t* imagePath) {
     HDC hdc = GetDC(hWnd);
     Gdiplus::Graphics graphics(hdc);
@@ -359,6 +393,7 @@ void RetroSnake_Initialize(HWND hwnd, bool Using_Grid, bool Spawning_Foods, int 
 };
 
 void RetroSnake_Destruction() {
+    Save_Score();
     SnakePlace.clear();
     RetroSnake_Hashes.clear();
     ObstaclePlace.clear();
@@ -1330,45 +1365,6 @@ int KeyBoard_Input(int userKey, bool Passive) {
 }
 
 void GameOver() {
-    //cout << "################################" << endl;
-    //cout << "#                              #" << endl;
-    //cout << "#           GAMEOVER           #" << endl;
-    //cout << "#                              #" << endl;
-    //cout << "################################" << endl;
-
-    //cleardevice();
-    //for (int i = 0; i < (MAP_SIZE * 3 / 2) / IMAGE_SIZE; i++) {
-    //    for (int j = 0; j < MAP_SIZE / IMAGE_SIZE; j++) {
-    //        putimage(i * IMAGE_SIZE, j * IMAGE_SIZE, &sb);
-    //    }
-    //}
-
-    //LOGFONT f;
-    //gettextstyle(&f);
-    //f.lfHeight = 96;
-    //_tcscpy(f.lfFaceName, _T("Consolas"));
-    //f.lfQuality = ANTIALIASED_QUALITY;
-
-    //settextstyle(&f);
-    //setbkmode(TRANSPARENT);
-    ////outtextxy(MAP_SIZE * 3 / 4, MAP_SIZE / 2, );
-    ////RECT r = { 0, 0, MAP_SIZE * 3 / 2, MAP_SIZE};
-    //char msg[] = "GAME OVER";
-    //int w = textwidth(_T(msg));
-    //int h = textheight(_T(msg));
-    //int x = (MAP_SIZE * 3 / 2) / 2 - 1.25 * w / 2;
-    //int y = (MAP_SIZE) / 2 - h / 2;
-    ////drawtext(_T("GAME OVER"), &r, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    //outtextxy(x, y, msg);
-    //f.lfHeight = 32;
-    //settextstyle(&f);
-    //outtextxy(x, y + 96, "Press any key to continue...");
-    //char str_score[128];
-    //sprintf(str_score, "Your final score: %.2lf", Score);
-    //outtextxy(x + 256, y + 192, str_score);
-
-    //Running = false;
-    ////exit(0);
 }
 
 void RetroSnake_Hashes_Info() {
@@ -1400,8 +1396,8 @@ void Level_Up() {
     Refresh_ScoreBoard(8);
 
     BreakTime *= 0.8;
-    if (Curr_Score_In_This_Layer * 2 >= Max_Score_In_This_Layer)
-        Max_Steps += RELATIVE_WIDTH * RELATIVE_HEIGHT;
+
+    Max_Steps += RELATIVE_WIDTH * RELATIVE_HEIGHT;
     //Multiply += 0.5;
     for(int i = 0; i < Liq.size(); i++)
         Liq[i].clear();
@@ -1674,136 +1670,136 @@ void OnPaint(HWND hwnd) {
 void Refresh_ScoreBoard(int Type) {
     switch (Type) {
     case -1: {
-        Draw_Image(ScoreBoardHwnd, 16, 32, L"Ores/coal.png");
+        Draw_Image(ScoreBoardHwnd, 16, 32 + 64, L"Ores/coal.png");
         char coal[256] = "\0";
         sprintf(coal, "%d", Awards[0]);
         wchar_t wcoal[256];
         mbstowcs(wcoal, coal, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 32 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wcoal);
+        Draw_Text(ScoreBoardHwnd, false, 64, 32 + 4 + 64, Color(255, 255, 255, 255), L"Monaco", 16, wcoal);
 
-        Draw_Image(ScoreBoardHwnd, 16, 64, L"Ores/copper_ingot.png");
+        Draw_Image(ScoreBoardHwnd, 16, 64 + 64, L"Ores/copper_ingot.png");
         char copper[256] = "\0";
         sprintf(copper, "%d", Awards[0]);
         wchar_t wcopper[256];
         mbstowcs(wcopper, copper, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 64 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wcopper);
+        Draw_Text(ScoreBoardHwnd, false, 64, 64 + 4 + 64, Color(255, 255, 255, 255), L"Monaco", 16, wcopper);
 
-        Draw_Image(ScoreBoardHwnd, 16, 96, L"Ores/iron_ingot.png");
+        Draw_Image(ScoreBoardHwnd, 16, 96 + 64, L"Ores/iron_ingot.png");
         char iron[256] = "\0";
         sprintf(iron, "%d", Awards[0]);
         wchar_t wiron[256];
         mbstowcs(wiron, iron, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 96 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wiron);
+        Draw_Text(ScoreBoardHwnd, false, 64, 96 + 4 + 64, Color(255, 255, 255, 255), L"Monaco", 16, wiron);
 
-        Draw_Image(ScoreBoardHwnd, 16, 128, L"Ores/gold_ingot.png");
+        Draw_Image(ScoreBoardHwnd, 16, 128 + 64, L"Ores/gold_ingot.png");
         char gold[256] = "\0";
         sprintf(gold, "%d", Awards[0]);
         wchar_t wgold[256];
         mbstowcs(wgold, gold, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 128 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wgold);
+        Draw_Text(ScoreBoardHwnd, false, 64, 128 + 4 + 64, Color(255, 255, 255, 255), L"Monaco", 16, wgold);
 
-        Draw_Image(ScoreBoardHwnd, 16, 160, L"Ores/lapis_lazuli.png");
+        Draw_Image(ScoreBoardHwnd, 16, 160 + 64, L"Ores/lapis_lazuli.png");
         char lapis[256] = "\0";
         sprintf(lapis, "%d", Awards[0]);
         wchar_t wlapis[256];
         mbstowcs(wlapis, lapis, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 160 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wlapis);
+        Draw_Text(ScoreBoardHwnd, false, 64, 160 + 4 + 64, Color(255, 255, 255, 255), L"Monaco", 16, wlapis);
 
-        Draw_Image(ScoreBoardHwnd, 16, 192, L"Ores/diamond.png");
+        Draw_Image(ScoreBoardHwnd, 16, 192 + 64, L"Ores/diamond.png");
         char diamond[256] = "\0";
         sprintf(diamond, "%d", Awards[0]);
         wchar_t wdiamond[256];
         mbstowcs(wdiamond, diamond, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 192 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wdiamond);
+        Draw_Text(ScoreBoardHwnd, false, 64, 192 + 4 + 64, Color(255, 255, 255, 255), L"Monaco", 16, wdiamond);
 
         char depth[256] = "\0";
         sprintf(depth, "%d", Depth);
         wchar_t wdepth[256];
         mbstowcs(wdepth, depth, 256);
-        Draw_Text(ScoreBoardHwnd, false, 8, 320 + 32, Color(255, 255, 255, 255), L"Monaco", 16, wdepth);
+        Draw_Text(ScoreBoardHwnd, false, 8, 480, Color(255, 255, 255, 255), L"Monaco", 16, wdepth);
         break;
     }
     case 0: {
         for (int i = 0; i < 6; i++) {
-            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 1 * IMAGE_SIZE, L"Blocks/dirt.png");
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 3 * IMAGE_SIZE, L"Blocks/dirt.png");
         }
         char coal[256] = "\0";
         sprintf(coal, "%d", Awards[0]);
         wchar_t wcoal[256];
         mbstowcs(wcoal, coal, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 32 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wcoal);
+        Draw_Text(ScoreBoardHwnd, false, 64, 96 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wcoal);
         break;
         //Actrual_Score
     }
     case 1: {
         for (int i = 0; i < 6; i++) {
-            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 2 * IMAGE_SIZE, L"Blocks/dirt.png");
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 4 * IMAGE_SIZE, L"Blocks/dirt.png");
         }
         char copper[256] = "\0";
         sprintf(copper, "%d", Awards[1]);
         wchar_t wcopper[256];
         mbstowcs(wcopper, copper, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 64 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wcopper);
+        Draw_Text(ScoreBoardHwnd, false, 64, 128 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wcopper);
         break;
     }
     case 2: {
         for (int i = 0; i < 6; i++) {
-            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 3 * IMAGE_SIZE, L"Blocks/dirt.png");
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 5 * IMAGE_SIZE, L"Blocks/dirt.png");
         }
         char iron[256] = "\0";
         sprintf(iron, "%d", Awards[2]);
         wchar_t wiron[256];
         mbstowcs(wiron, iron, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 96 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wiron);
+        Draw_Text(ScoreBoardHwnd, false, 64, 160 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wiron);
         break;
     }
     case 4: {
         for (int i = 0; i < 6; i++) {
-            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 4 * IMAGE_SIZE, L"Blocks/dirt.png");
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 6 * IMAGE_SIZE, L"Blocks/dirt.png");
         }
         char gold[256] = "\0";
         sprintf(gold, "%d", Awards[4]);
         wchar_t wgold[256];
         mbstowcs(wgold, gold, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 128 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wgold);
+        Draw_Text(ScoreBoardHwnd, false, 64, 192 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wgold);
         break;
     }
     case 5: {
         for (int i = 0; i < 6; i++) {
-            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 5 * IMAGE_SIZE, L"Blocks/dirt.png");
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 7 * IMAGE_SIZE, L"Blocks/dirt.png");
         }
         char lapis[256] = "\0";
         sprintf(lapis, "%d", Awards[5]);
         wchar_t wlapis[256];
         mbstowcs(wlapis, lapis, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 160 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wlapis);
+        Draw_Text(ScoreBoardHwnd, false, 64, 224 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wlapis);
         break;
     }
     case 7: {
         for (int i = 0; i < 6; i++) {
-            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 6 * IMAGE_SIZE, L"Blocks/dirt.png");
+            Draw_Image(ScoreBoardHwnd, (2 + i) * IMAGE_SIZE, 8 * IMAGE_SIZE, L"Blocks/dirt.png");
         }
         char diamond[256] = "\0";
         sprintf(diamond, "%d", Awards[7]);
         wchar_t wdiamond[256];
         mbstowcs(wdiamond, diamond, 256);
-        Draw_Text(ScoreBoardHwnd, false, 64, 192 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wdiamond);
+        Draw_Text(ScoreBoardHwnd, false, 64, 256 + 4, Color(255, 255, 255, 255), L"Monaco", 16, wdiamond);
         break;
     }
     case 8: {
         for (int i = 0; i < 8; i++) {
-            Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 11 * IMAGE_SIZE, L"Blocks/dirt.png");
+            Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 12 * IMAGE_SIZE, L"Blocks/dirt.png");
         }
         char depth[256] = "\0";
         sprintf(depth, "%d", Depth);
         wchar_t wdepth[256];
         mbstowcs(wdepth, depth, 256);
-        Draw_Text(ScoreBoardHwnd, false, 8, 320 + 32, Color(255, 255, 255, 255), L"Monaco", 16, wdepth);
+        Draw_Text(ScoreBoardHwnd, false, 8, 320 + 64, Color(255, 255, 255, 255), L"Monaco", 16, wdepth);
         break;
     }
     }
     for (int i = 0; i < 8; i++) {
-        Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 9 * IMAGE_SIZE, L"Blocks/dirt.png");
+        Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 10 * IMAGE_SIZE, L"Blocks/dirt.png");
     }
 
     char ac[256] = "\0";
@@ -1812,20 +1808,48 @@ void Refresh_ScoreBoard(int Type) {
     sprintf(ac, "%.2lf", Actrual_Score);
     wchar_t wac[256];
     mbstowcs(wac, ac, 256);
-    Draw_Text(ScoreBoardHwnd, false, 8, 256 + 32, Color(255, 255, 255, 255), L"Monaco", 16, wac);
+    Draw_Text(ScoreBoardHwnd, false, 8, 256 + 128, Color(255, 255, 255, 255), L"Monaco", 16, wac);
 }
 
 void ScoreBoard_Painting() {
-    Draw_Text(ScoreBoardHwnd, true, 56, 0, Color(255, 255, 255, 255), L"Monaco", 16, L"Hello World");
+    Draw_Text(ScoreBoardHwnd, true, 16, 32, Color(255, 255, 255, 255), L"微软雅黑", 16, Name);
     Refresh_ScoreBoard(-1);
 
-    Draw_Text(ScoreBoardHwnd, false, 64 - 8, 256, Color(255, 255, 255, 255), L"Monaco", 16, L"Total Score");
-    Draw_Text(ScoreBoardHwnd, false, 64 - 10, 320, Color(255, 255, 255, 255), L"Monaco", 16, L"Current Depth");
+    Draw_Text(ScoreBoardHwnd, false, 64 - 8, 352, Color(255, 255, 255, 255), L"Monaco", 16, L"Total Score");
+    Draw_Text(ScoreBoardHwnd, false, 64 - 10, 448, Color(255, 255, 255, 255), L"Monaco", 16, L"Current Depth");
 
     for (int i = 0; i < 160; i += 16) {
-        Draw_Image(ScoreBoardHwnd, 8 + i, 512, L"Health.png");
+        Draw_Image(ScoreBoardHwnd, 8 + i, 640, L"Health.png");
+    }   
+}
+
+void Save_Score() {
+    // 获取当前时间的时间戳
+    std::time_t currentTime = std::time(nullptr);
+
+    // 将时间戳转换为本地时间结构 tm
+    std::tm* localTime = std::localtime(&currentTime);
+
+    // 使用 stringstream 格式化时间为字符串
+    std::wstringstream wss;
+    wss << std::put_time(localTime, L"%Y-%m-%d %H:%M:%S");
+
+    // 将格式化后的字符串转换为 std::wstring
+    std::wstring wstr = wss.str();
+
+    std::wofstream outFile("output.txt", std::ios::app);
+
+    // 检查文件是否成功打开
+    if (!outFile.is_open()) {
+        std::wcerr << L"Error opening file!" << std::endl;
+        return;
     }
-    
+
+    // 将宽字符数组写入文件
+    outFile << L"[" << wstr << L"]" << L" " << Name << " " << Actrual_Score << endl;
+
+    // 关闭文件
+    outFile.close();
 }
 
 VOID CALLBACK Liquid_Flowing_Function(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
@@ -1841,47 +1865,34 @@ VOID CALLBACK Auto_Moving(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) 
 }
 
 VOID CALLBACK Liquid_Refresh_Function(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
-    for (auto it = ObstaclePlace.begin(); it != ObstaclePlace.end(); it++) {
-        if (RetroSnake_Hashes[it->x][it->y] >= 10000 and RetroSnake_Hashes[it->x][it->y] < 10100) {
-            int chance = Random(0, 100);
-            if (chance > 50) {
-                RetroSnake_Hashes[it->x][it->y]++;
-                if (RetroSnake_Hashes[it->x][it->y] == 10038) RetroSnake_Hashes[it->x][it->y] = 10000;
-                if (RetroSnake_Hashes[it->x][it->y] < 10019)
-                    Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, LavaList[RetroSnake_Hashes[it->x][it->y] - 10000]);
+    for (int i = 0; i < Liq.size(); i++) {
+        for (auto it = Liq[i].begin(); it != Liq[i].end(); it++) {
+            if (RetroSnake_Hashes[it->first.x][it->first.y] >= 10000 and RetroSnake_Hashes[it->first.x][it->first.y] < 10100) {
+                int chance = Random(0, 100);
+                if (chance > 50) {
+                    RetroSnake_Hashes[it->first.x][it->first.y]++;
+                    if (RetroSnake_Hashes[it->first.x][it->first.y] == 10038) RetroSnake_Hashes[it->first.x][it->first.y] = 10000;
+                    if (RetroSnake_Hashes[it->first.x][it->first.y] < 10019)
+                        Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, LavaList[RetroSnake_Hashes[it->first.x][it->first.y] - 10000]);
+                    else
+                        Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, LavaList[10037 - RetroSnake_Hashes[it->first.x][it->first.y]]);
+                }
+            }
+            else if (RetroSnake_Hashes[it->first.x][it->first.y] >= 20000 and RetroSnake_Hashes[it->first.x][it->first.y] < 20100) {
+                RetroSnake_Hashes[it->first.x][it->first.y]++;
+                if (RetroSnake_Hashes[it->first.x][it->first.y] == 20064) RetroSnake_Hashes[it->first.x][it->first.y] = 20000;
+                if (RetroSnake_Hashes[it->first.x][it->first.y] < 20032)
+                    Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, WaterList[RetroSnake_Hashes[it->first.x][it->first.y] - 20000]);
                 else
-                    Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, LavaList[10037 - RetroSnake_Hashes[it->x][it->y]]);
+                    Draw_Image(GameHwnd, it->first.x * IMAGE_SIZE, it->first.y * IMAGE_SIZE, WaterList[20064 - RetroSnake_Hashes[it->first.x][it->first.y]]);
+            }
+            if (RetroSnake_Hashes[it->first.x][it->first.y] >= 21000) {
             }
         }
-        else if (RetroSnake_Hashes[it->x][it->y] >= 20000 and RetroSnake_Hashes[it->x][it->y] < 20100) {
-            RetroSnake_Hashes[it->x][it->y]++;
-            if (RetroSnake_Hashes[it->x][it->y] == 20064) RetroSnake_Hashes[it->x][it->y] = 20000;
-            if (RetroSnake_Hashes[it->x][it->y] < 20032)
-                Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, WaterList[RetroSnake_Hashes[it->x][it->y] - 20000]);
-            else
-                Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, WaterList[20064 - RetroSnake_Hashes[it->x][it->y]]);
-        }
-        if (RetroSnake_Hashes[it->x][it->y] >= 21000) {
-            //if (RetroSnake_Hashes[it->x][it->y] % 10000 <= 900) {
-            //    RetroSnake_Hashes[it->x][it->y] += 100;
-            //    int SpreadDistance = (RetroSnake_Hashes[it->x][it->y] % 10000) / 100;
-            //    DrawImage(GameHwnd, it->x * IMAGE_SIZE, it->y * IMAGE_SIZE, KidsWaterList[9][SpreadDistance]);
-            //}
-            //else {
-                //RetroSnake_Hashes[it->x][it->y] = -1;
-                //DrawImage(GameHwnd, it->x * IMAGE_SIZE, it->y * IMAGE_SIZE, L"redstone_block.png");
-        }
     }
-    // ???????????????????е????
-    // hwnd ??????????Щ??????????ò???
-    // uMsg ????WM_TIMER???
-    // idEvent ?????????????ID
-    // dwTime ?????????????
 }
 
 LRESULT CALLBACK NewGameProc(HWND GamehWnd, UINT message, WPARAM wParam, LPARAM lParam) {
-    static HWND hwndStatic;
-    static HBRUSH hBrush = NULL;
     switch (message) {
     case WM_CLOSE:
         DestroyWindow(GamehWnd);
@@ -1920,7 +1931,8 @@ LRESULT CALLBACK NewGameProc(HWND GamehWnd, UINT message, WPARAM wParam, LPARAM 
             break;
         }
         case VK_SPACE: {
-            Level_Up();
+            if (Curr_Score_In_This_Layer * 2 >= Max_Score_In_This_Layer)
+                Level_Up();
             //InvalidateRect(hWnd, NULL, TRUE);
         }
         }
@@ -1929,7 +1941,7 @@ LRESULT CALLBACK NewGameProc(HWND GamehWnd, UINT message, WPARAM wParam, LPARAM 
             int value = KeyBoard_Input(FLAG, false);
             if (value) {
                 KillTimer(NULL, AutoMovingTimer);
-                AutoMovingTimer = SetTimer(NULL, 1, AUTO_MOVING_COOLDOWN, (TIMERPROC)Auto_Moving);
+                AutoMovingTimer = SetTimer(NULL, 1, Auto_Moving_Cooldown[Speed], (TIMERPROC)Auto_Moving);
             }
 
             break;
@@ -1987,13 +1999,15 @@ LRESULT CALLBACK MainMenuProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
     }
     case WM_COMMAND: {
         if (LOWORD(wParam) == 0 && HIWORD(wParam) == BN_CLICKED) {
-            StartNewGameWindow();
+            //StartNewGameWindow();
+            Enter_Name();
         }
         else if (LOWORD(wParam) == 1 && HIWORD(wParam) == BN_CLICKED) {
-            MessageBox(hWnd, TEXT("??? 2 ????????"), TEXT("???"), MB_OK);
+            MessageBox(hWnd, TEXT("鎸栨帢鍙兘鏄氨璧跺揩瑙"), TEXT("瘑鍗¤惃鎷変綘浠及璁″揩浜嗭紝鍝噊ps棰嗗锛岀粰"), MB_OK);
         }
         else if (LOWORD(wParam) == 2 && HIWORD(wParam) == BN_CLICKED) {
-            MessageBox(hWnd, TEXT("??? 3 ????????"), TEXT("???"), MB_OK);
+            OpenSetting();
+            ShowWindow(SettingsHwnd, SW_SHOW);
         }
         else if (LOWORD(wParam) == 3 && HIWORD(wParam) == BN_CLICKED) {
             PostQuitMessage(0);
@@ -2020,9 +2034,178 @@ LRESULT CALLBACK MainMenuProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
     return 0;
 }
 
+LRESULT CALLBACK SettingsProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+    case WM_CLOSE:
+        DestroyWindow(hWnd);  // 只销毁窗口 B
+        return 0;
+
+    case WM_DESTROY:
+        return 0;
+    case WM_MOUSEMOVE: {
+        POINT point;
+        point.x = GET_X_LPARAM(lParam);
+        point.y = GET_Y_LPARAM(lParam);
+
+        // buttonRect = { 100, 100, 300, 140 };
+        if (Point_In_Rect(Settings_Button_Rect[0], point))
+        {
+            if (!isMouseOverSettingsButton[0]){
+                isMouseOverSettingsButton[0] = true;
+                Draw_Image(Settings_Button[0], 0, 0, MusicList[Music].Actived);
+            }
+        }
+        else
+        {
+            if (isMouseOverSettingsButton[0]) {
+                isMouseOverSettingsButton[0] = false;
+                Draw_Image(Settings_Button[0], 0, 0, MusicList[Music].Non_Actived);
+            }
+        }
+
+        if (Point_In_Rect(Settings_Button_Rect[1], point))
+        {
+            if (!isMouseOverSettingsButton[1]) {
+                isMouseOverSettingsButton[1] = true;
+                Draw_Image(Settings_Button[1], 0, 0, SpeedList[Speed].Actived);
+            }
+        }
+        else
+        {
+            if (isMouseOverSettingsButton[1]) {
+                isMouseOverSettingsButton[1] = false;
+                Draw_Image(Settings_Button[1], 0, 0, SpeedList[Speed].Non_Actived);
+            }
+        }
+
+        if (Point_In_Rect(Settings_Button_Rect[2], point))
+        {
+            if (!isMouseOverSettingsButton[2]) {
+                isMouseOverSettingsButton[2] = true;
+                Draw_Image(Settings_Button[2], 0, 0, ModeList[Mode].Actived);
+            }
+        }
+        else
+        {
+            if (isMouseOverSettingsButton[2]) {
+                isMouseOverSettingsButton[2] = false;
+                Draw_Image(Settings_Button[2], 0, 0, ModeList[Mode].Non_Actived);
+            }
+        }
+
+        if (Point_In_Rect(Settings_Button_Rect[3], point))
+        {
+            if (!isMouseOverSettingsButton[3]) {
+                isMouseOverSettingsButton[3] = true;
+                Draw_Image(Settings_Button[3], 0, 0, L"Buttons/Settings/Save_Actived.png");
+            }
+        }
+        else
+        {
+            if (isMouseOverSettingsButton[3]) {
+                isMouseOverSettingsButton[3] = false;
+                Draw_Image(Settings_Button[3], 0, 0, L"Buttons/Settings/Save_Non-Actived.png");
+            }
+        }
+        
+        return 0;
+        break;
+    }
+    case WM_DRAWITEM: {
+        if (Settings_Init == false) {
+            for (int i = 0; i < 4; i++) {
+                Draw_Image(Settings_Button[i], 0, 0, Setting_Buttons_List[i]);
+            }
+            Settings_Init = true;
+        }
+
+        return TRUE;
+    }
+    case WM_COMMAND: {
+        if (LOWORD(wParam) == 4 && HIWORD(wParam) == BN_CLICKED) {
+            Music++;
+            if (Music == 8) Music = 0;
+            Draw_Image(Settings_Button[0], 0, 0, MusicList[Music].Actived);
+        }
+        else if (LOWORD(wParam) == 5 && HIWORD(wParam) == BN_CLICKED) {
+            Speed++;
+            if (Speed == 3) Speed = 0;
+            Draw_Image(Settings_Button[1], 0, 0, SpeedList[Speed].Actived);
+        }
+        else if (LOWORD(wParam) == 6 && HIWORD(wParam) == BN_CLICKED) {
+            Mode++;
+            if (Mode == 2) Mode = 0;
+            Draw_Image(Settings_Button[2], 0, 0, ModeList[Mode].Actived);
+        }
+        else if (LOWORD(wParam) == 7 && HIWORD(wParam) == BN_CLICKED) {
+            DestroyWindow(hWnd);
+        }
+        return 0;
+    }
+    case WM_PAINT: {
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hWnd, &ps);
+        FillRect(hdc, &ps.rcPaint, CreateSolidBrush(RGB(255, 255, 255)));
+
+        for (int i = 0; i < SETTING_WIDTH / IMAGE_SIZE; i++) {
+            for (int j = 0; j < SETTING_HEIGHT / IMAGE_SIZE; j++) {
+                Draw_Image(hWnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/dirt.png");
+            }
+        }
+
+        EndPaint(hWnd, &ps);
+    }
+    default:
+        return DefWindowProc(hWnd, message, wParam, lParam);
+    }
+    return 0;
+}
+
+LRESULT CALLBACK NameEnterProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    static HWND hEdit, hButton;
+
+    switch (message)
+    {
+    case WM_CREATE:
+        // 创建文本框
+        hEdit = CreateWindow(TEXT("EDIT"), NULL,
+            WS_CHILD | WS_VISIBLE | WS_BORDER,
+            10, 10, 200, 24,
+            hwnd, (HMENU)0x104, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+
+        // 创建按钮
+        hButton = CreateWindow(TEXT("BUTTON"), TEXT("OK"),
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            60, 50, 110, 25,
+            hwnd, (HMENU)0x101, ((LPCREATESTRUCT)lParam)->hInstance, NULL);
+        return 0;
+
+        case WM_COMMAND:
+            switch (LOWORD(wParam))
+            {
+            case 0x101:
+            {
+                HWND hedit = GetDlgItem(hwnd, 0x104); // 获取文本框控件的句柄
+                GetWindowTextW(hedit, Name, 100);  // 获取文本框内容
+                if (Name[0] == L'\0') {
+                    wcscpy(Name, L"Steve");
+                }
+                DestroyWindow(hwnd);
+                StartNewGameWindow();
+                break;
+            }
+            }
+        return 0;
+
+    case WM_DESTROY:
+        return 0;
+    }
+    return DefWindowProc(hwnd, message, wParam, lParam);
+}
+
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     Gdiplus_Startup_Wrapper(); // Initialize GDI+
-
 
     wc.lpfnWndProc = MainMenuProc;
     wc.hInstance = hInstance;
@@ -2032,15 +2215,25 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     ng.hInstance = hInstance;
     ng.lpszClassName = L"NewGameWindow";
 
+    settings.lpfnWndProc = SettingsProc;
+    settings.hInstance = hInstance;
+    settings.lpszClassName = L"GameSettings";
+
+    nh.lpfnWndProc = NameEnterProc;
+    nh.hInstance = hInstance;
+    nh.lpszClassName = L"EnterYourName";
+
     RegisterClass(&ng);
     RegisterClass(&wc);
+    RegisterClass(&settings);
+    RegisterClass(&nh);
+
+    int x = (screenWidth - MAP_WIDTH) / 2;
+    int y = (screenHeight - MAP_HEIGHT) / 2 - 16;
 
     hWnd = CreateWindow(wc.lpszClassName, L"Forgotten Realms: Whispers Of Hidden Hoard",
-        WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME, CW_USEDEFAULT, CW_USEDEFAULT,
+        WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME, x, y,
         MAP_WIDTH, MAP_HEIGHT, NULL, NULL, hInstance, NULL);
-
-    //Play_Media(MediaList[4].Media);
-    //PlaySound(TEXT("Sound/Danny.wav"), NULL, SND_FILENAME);
 
     if (!hWnd) {
         MessageBox(NULL, L"Call to CreateWindow failed!", L"Error!", MB_ICONERROR | MB_OK);
@@ -2051,7 +2244,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     for (int i = 0; i < 4; i++) {
         Button[i] = CreateWindow(TEXT("BUTTON"), TEXT("??????"), WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
             CENTER(400), 320 + i * 60, 400, 40, hWnd, (HMENU)i, hInstance, NULL);
-        ButtonRect[i] = { CENTER(400) - 8, 320 - 8 + i * 60, CENTER(400) + 400 + 8, 320 + i * 60 + 40 + 8 };
+        ButtonRect[i] = { CENTER(400) - 8, 320 + i * 60 - 8, CENTER(400) + 400 + 8, 320 + i * 60 + 40 + 8 };
     }
 
     ShowWindow(hWnd, nCmdShow);
@@ -2068,14 +2261,28 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     return 0;
 }
 
+void Enter_Name() {
+    ShowWindow(hWnd, SW_HIDE);
+    int x = (screenWidth - 240) / 2;
+    int y = (screenHeight - 120) / 2;
+    NameHwnd = CreateWindow(nh.lpszClassName, L"What should we call you? ",
+        WS_POPUP & WS_THICKFRAME, x, y,
+        240, 120, NULL, NULL, nh.hInstance, NULL);
+
+    ShowWindow(NameHwnd, SW_SHOW);
+}
+
 void StartNewGameWindow() {
     if (GameHwnd) {
         DestroyWindow(GameHwnd);
         GameHwnd = NULL;
         RetroSnake_Destruction();
     }
+
+    int x = (screenWidth - MAP_WIDTH) / 2;
+    int y = (screenHeight - MAP_HEIGHT) / 2 - 16;
     GameHwnd = CreateWindow(ng.lpszClassName, L"Forgotten Realms: Whispers Of Hidden Hoard",
-        WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME, CW_USEDEFAULT, CW_USEDEFAULT,
+        WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME, x, y,
         MAP_WIDTH, MAP_HEIGHT, NULL, NULL, wc.hInstance, NULL);
     ScoreBoardHwnd = CreateWindow(TEXT("BUTTON"), TEXT("??????"), WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
         1024, 0, 272, 896, GameHwnd, NULL, ng.hInstance, NULL);
@@ -2088,9 +2295,27 @@ void StartNewGameWindow() {
     RetroSnake_Initialize(GameHwnd, false, true, 8, 16, 1);
     ScoreBoard_Painting();
 
-    AutoMovingTimer = SetTimer(NULL, 1, AUTO_MOVING_COOLDOWN, (TIMERPROC)Auto_Moving);
-    LiquidRefresh = SetTimer(NULL, 1, WATER_REFRESHING_COOLDOWN, (TIMERPROC)Liquid_Refresh_Function);
-    LiquidFlowing = SetTimer(NULL, 1, WATER_SPREADING_COOLDOWN, (TIMERPROC)Liquid_Flowing_Function);
+    AutoMovingTimer = SetTimer(NULL, 1, Auto_Moving_Cooldown[Speed], (TIMERPROC)Auto_Moving);
+    LiquidRefresh = SetTimer(NULL, 2, WATER_REFRESHING_COOLDOWN, (TIMERPROC)Liquid_Refresh_Function);
+    LiquidFlowing = SetTimer(NULL, 3, WATER_SPREADING_COOLDOWN, (TIMERPROC)Liquid_Flowing_Function);
+}
+
+void OpenSetting() {
+    int x = (screenWidth - SETTING_WIDTH) / 2;
+    int y = (screenHeight - SETTING_HEIGHT) / 2 - 16;
+    SettingsHwnd = CreateWindow(settings.lpszClassName, L"Game Settings",
+        WS_POPUP & WS_THICKFRAME, x, y,
+        SETTING_WIDTH, SETTING_HEIGHT, hWnd, NULL, settings.hInstance, NULL);
+
+    for (int i = 0; i < 4; i++) {
+        Settings_Button[i] = CreateWindow(TEXT("BUTTON"), TEXT("???"), WS_CHILD | WS_VISIBLE | BS_OWNERDRAW,
+            (SETTING_WIDTH - 400) / 2, 120 + i * 60, 400, 40, SettingsHwnd, (HMENU)(i + 4), settings.hInstance, NULL);
+        Settings_Button_Rect[i] = { (SETTING_WIDTH - 400) / 2 - 8, 120 + i * 60 - 8, ((SETTING_WIDTH - 400) / 2) + 400 + 8, 120 + i * 60 + 40 + 8 };
+        if (!Settings_Button[i]) {
+            MessageBox(SettingsHwnd, _T("Failed to create settings button!"), _T("Error"), MB_ICONERROR);
+            return;
+        }
+    }
 }
 // RetroSnake_Hashes Value:
 // Snake: 1

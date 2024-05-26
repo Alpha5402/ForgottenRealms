@@ -63,6 +63,8 @@ namespace std {
 #define AUTO_MOVING_COOLDOWN 800
 #define WATER_SPREADING_COOLDOWN 600
 #define WATER_REFRESHING_COOLDOWN 200
+#define SETTING_WIDTH 800
+#define SETTING_HEIGHT 480
 
 #define WITHIN_OPEN_INTERVAL(a, b, c) ((a) > (b) && (a) < (c))
 #define WITHIN_CLOSED_INTERVAL(a, b, c) ((a) >= (b) && (a) <= (c))
