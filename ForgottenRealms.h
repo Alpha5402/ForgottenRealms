@@ -71,3 +71,4 @@ void StartNewGameWindow();
 void OpenSetting();
 void Enter_Name();
 void Save_Score();
+void Ranking_Calculate();

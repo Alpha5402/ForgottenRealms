@@ -394,6 +394,7 @@ void RetroSnake_Initialize(HWND hwnd, bool Using_Grid, bool Spawning_Foods, int 
 
 void RetroSnake_Destruction() {
     Save_Score();
+    Ranking_Calculate();
     SnakePlace.clear();
     RetroSnake_Hashes.clear();
     ObstaclePlace.clear();
@@ -1799,7 +1800,7 @@ void Refresh_ScoreBoard(int Type) {
     }
     }
     for (int i = 0; i < 8; i++) {
-        Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 10 * IMAGE_SIZE, L"Blocks/dirt.png");
+        Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 12 * IMAGE_SIZE, L"Blocks/dirt.png");
     }
 
     char ac[256] = "\0";
@@ -1837,7 +1838,7 @@ void Save_Score() {
     // 将格式化后的字符串转换为 std::wstring
     std::wstring wstr = wss.str();
 
-    std::wofstream outFile("output.txt", std::ios::app);
+    std::wofstream outFile("log.txt", std::ios::app);
 
     // 检查文件是否成功打开
     if (!outFile.is_open()) {
@@ -1846,7 +1847,56 @@ void Save_Score() {
     }
 
     // 将宽字符数组写入文件
-    outFile << L"[" << wstr << L"]" << L" " << Name << " " << Actrual_Score << endl;
+    outFile << Name << " " << Actrual_Score << L" [" << wstr << L"]" << endl;
+
+    // 关闭文件
+    outFile.close();
+}
+
+void Ranking_Calculate() {
+    std::wifstream inFile("Ranking.txt"); // 打开文件输入流
+    list<std::pair<wstring, int>> Ranking_List;
+
+    // 检查文件是否成功打开
+    if (inFile.is_open()) {
+        std::wstring data;
+
+        while (std::getline(inFile, data)) { // 从文件逐行读取数据
+            std::wistringstream iss(data);
+            // 读取所需的值
+            wstring name;
+            int value;
+            iss >> name >> value;
+            if (name != Name)
+                Ranking_List.push_back(std::pair<wstring, int>(name, value));
+            else if (value > Actrual_Score) Actrual_Score = value;
+        }
+
+        bool LessThanBefore = true;
+        bool successfully_Inserted = false;
+        for (auto it = Ranking_List.begin(); it != Ranking_List.end(); it++) {
+            if (it->second >= Actrual_Score) {
+                LessThanBefore = true;
+            }
+            else if (LessThanBefore and it->second < Actrual_Score) {
+                Ranking_List.insert(it, std::pair<wstring, int>(Name, Actrual_Score));
+                LessThanBefore = false;
+                successfully_Inserted = true;
+            }
+        }
+        if (!successfully_Inserted)
+            Ranking_List.push_back(std::pair<wstring, int>(Name, Actrual_Score));
+        inFile.close();
+    }
+    else {
+        Ranking_List.push_back(std::pair<wstring, int>(Name, Actrual_Score));
+    }
+
+    std::wofstream outFile("Ranking.txt");
+
+    for (const auto& element : Ranking_List) {
+        outFile << element.first << " " << element.second << endl;
+    }
 
     // 关闭文件
     outFile.close();
@@ -2003,7 +2053,22 @@ LRESULT CALLBACK MainMenuProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPa
             Enter_Name();
         }
         else if (LOWORD(wParam) == 1 && HIWORD(wParam) == BN_CLICKED) {
-            MessageBox(hWnd, TEXT("鎸栨帢鍙兘鏄氨璧跺揩瑙"), TEXT("瘑鍗¤惃鎷変綘浠及璁″揩浜嗭紝鍝噊ps棰嗗锛岀粰"), MB_OK);
+            LPCWSTR filePath = L"Ranking.txt";
+
+            // 使用 ShellExecute 打开文件
+            HINSTANCE result = ShellExecute(
+                NULL,         // 无父窗口
+                L"open",       // 操作
+                L"notepad.exe",// 要启动的程序
+                filePath,     // 程序参数（要打开的文件路径）
+                NULL,         // 默认目录
+                SW_SHOWNORMAL // 显示窗口方式
+            );
+
+            // 检查结果
+            if ((int)result <= 32) {
+                MessageBox(NULL, L"Failed to open file with Notepad", L"Error", MB_ICONERROR);
+            }
         }
         else if (LOWORD(wParam) == 2 && HIWORD(wParam) == BN_CLICKED) {
             OpenSetting();
@@ -2190,6 +2255,12 @@ LRESULT CALLBACK NameEnterProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lP
                 GetWindowTextW(hedit, Name, 100);  // 获取文本框内容
                 if (Name[0] == L'\0') {
                     wcscpy(Name, L"Steve");
+                }
+                else if (Name[0] == L' ') {
+                    int i = 0;
+                    while (Name[i++] == L' ');
+                    if (Name[i - 1] == L'\0')
+                        wcscpy(Name, L"Steve");
                 }
                 DestroyWindow(hwnd);
                 StartNewGameWindow();
