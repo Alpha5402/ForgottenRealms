@@ -1,7 +1,11 @@
 #pragma once
-#define ORES { L"Blocks/Ores/coal_ore.png", L"Blocks/Ores/copper_ore.png", L"Blocks/Ores/iron_ore.png", \
-    L"Blocks/Ores/redstone_ore.png", L"Blocks/Ores/gold_ore.png", L"Blocks/Ores/lapis_ore.png", \
-    L"Blocks/Ores/emerald_ore.png", L"Blocks/Ores/diamond_ore.png" }
+#define ORES { L"Ores/coal_ore.png", L"Ores/copper_ore.png", L"Ores/iron_ore.png", \
+    L"Ores/redstone_ore.png", L"Ores/gold_ore.png", L"Ores/lapis_ore.png", \
+    L"Ores/emerald_ore.png", L"Ores/diamond_ore.png" }
+
+#define AWARDS { L"Ores/coal.png", L"Ores/copper_ingot.png", L"Ores/iron_ingot.png", \
+    L"", L"Ores/gold_ingot.png", L"Ores/lapis_lazuli.png", \
+    L"", L"Ores/diamond_ore.png" }
 
 #define BUTTON_LIST  { { L"Buttons/Button_GameStart_Actived.png", L"Buttons/Button_GameStart_Non-Actived.png" },  \
     { L"Buttons/Button_ScoreBoard_Actived.png", L"Buttons/Button_ScoreBoard_Non-Actived.png" }, \
@@ -65,9 +69,30 @@
     L"Lava/Lava_7_1.png", L"Lava/Lava_7_2.png", L"Lava/Lava_7_3.png", \
     L"Lava/Lava_8_1.png", L"Lava/Lava_8_2.png", L"Lava/Lava_8_3.png" }
 
-#define MEDIA_LIST { {TEXT("Sound/Danny.wav"), 254000}, \
-    {TEXT("Sound/Haggstrom.wav"), 204000}, \
+#define SETTING_LIST { L"Buttons/Settings/Music_Auto_Non-Actived.png", L"Buttons/Settings/Mid_Non-Actived.png", L"Buttons/Settings/Normal_Non-Actived.png", L"Buttons/Settings/Save_Non-Actived.png"}
+
+#define MUSIC_LIST { {L"Buttons/Settings/Music_Auto_Actived.png",  L"Buttons/Settings/Music_Auto_Non-Actived.png"} ,\
+{L"Buttons/Settings/Music_Minecraft_Actived.png",  L"Buttons/Settings/Music_Minecraft_Non-Actived.png"} , \
+{L"Buttons/Settings/Music_Danny_Actived.png",  L"Buttons/Settings/Music_Danny_Non-Actived.png"} ,\
+{L"Buttons/Settings/Music_Haggstrom_Actived.png",  L"Buttons/Settings/Music_Haggstrom_Non-Actived.png"} ,\
+{L"Buttons/Settings/Music_Living_Mice_Actived.png",  L"Buttons/Settings/Music_Living_Mice_Non-Actived.png"} ,\
+{L"Buttons/Settings/Music_Mice_on_Venus_Actived.png",  L"Buttons/Settings/Music_Mice_on_Venus_Non-Actived.png"} ,\
+{L"Buttons/Settings/Music_Subwoofer_Lullaby_Actived.png",  L"Buttons/Settings/Music_Subwoofer_Lullaby_Non-Actived.png"} ,\
+{L"Buttons/Settings/Music_Close_Actived.png",  L"Buttons/Settings/Music_Close_Non-Actived.png"} ,\
+}
+
+#define SPEED_LIST { {L"Buttons/Settings/Mid_Actived.png", L"Buttons/Settings/Mid_Non-Actived.png"} ,\
+{L"Buttons/Settings/Slow_Actived.png", L"Buttons/Settings/Slow_Non-Actived.png"} , \
+{L"Buttons/Settings/Fast_Actived.png", L"Buttons/Settings/Fast_Non-Actived.png"} ,\
+}
+
+#define MODE_LIST { {L"Buttons/Settings/Normal_Actived.png", L"Buttons/Settings/Normal_Non-Actived.png"} ,\
+{L"Buttons/Settings/Extreme_Actived.png", L"Buttons/Settings/Extreme_Non-Actived.png"} , \
+}
+
+#define MEDIA_LIST { { TEXT("Sound/Minecraft.wav"), 254000 }, \
+    { TEXT("Sound/Danny.wav"), 254000}, \
+    { TEXT("Sound/Haggstrom.wav"), 204000}, \
     { TEXT("Sound/Living Mice.wav"), 177000 }, \
     { TEXT("Sound/Mice on Venus.wav"), 281000 }, \
-    { TEXT("Sound/Minecraft.wav"), 254000 }, \
     { TEXT("Sound/Subwoofer Lullaby.wav"), 208000 } }

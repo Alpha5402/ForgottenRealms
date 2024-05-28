@@ -4,6 +4,8 @@
 using namespace Gdiplus;
 using namespace std;
 
+extern int Foods_Amount;
+
 // Declaration
 int Random(int min, int max);
 int Partition(vector<pathfinding>& arr, int left, int right);
@@ -28,13 +30,16 @@ void RetroSnake_Initialize(HWND hwnd, bool Using_Grid, bool Spawning_Foods, int 
 void RetroSnake_Destruction();
 void Foods_Create(int value, int max);
 void Foods_Create(int* queue, int max);
-void Foods_Spawn();
+void Foods_Spawn(int Amount = Foods_Amount);
 void Update_Snake_Head(HWND hWnd);
 void Update_Snake_Rail(HWND hWnd);
 void Check_Snake_To_Update(HWND hWnd, place Now, place Next, place Before);
 void Draw_Snake_According_To_Vector(HWND hWnd);
 void Random_Draw_Snake();
 void Random_Draw_Obstacle();
+void Refresh_ScoreBoard(int Type);
+void Inherit(unordered_map<place, int> temp);
+void Circulate_Draw_Image(HWND hWnd, int x, int y, int max_x, int max_y, const wchar_t* imagePath);
 int Adjacent_Unit_Amount(place location, int type);
 int Surrounding_Unit_Amount(place location, int type);
 place Find_Common_Side(place a, place b);
@@ -48,7 +53,7 @@ void Clear_Block_Occupied(char Forward, place loc);
 void Water_Clear(place loc);
 void Water_Spreading();
 void Blocks_Drying();
-void KeyBoard_Input(int userKey);
+int KeyBoard_Input(int userKey);
 void Auto_Moving();
 void GameOver();
 void Hash_Info();
@@ -63,3 +68,10 @@ VOID CALLBACK Liquid_Flowing_Function(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DW
 VOID CALLBACK Auto_Moving(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 VOID CALLBACK Liquid_Refresh_Function(HWND hwnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime);
 void StartNewGameWindow();
+void OpenSetting();
+void Enter_Name();
+void Save_Score();
+void Ranking_Calculate();
+void Enchantment();
+void Solidification(place location);
+void Event();
