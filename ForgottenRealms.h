@@ -44,7 +44,7 @@ int Adjacent_Unit_Amount(place location, int type);
 int Surrounding_Unit_Amount(place location, int type);
 place Find_Common_Side(place a, place b);
 void Lengthen(place source, place target, COLORREF GridColor, COLORREF InsideColor);
-void Shorten(int begin);
+void Shorten(int begin, int model = 2);
 void Moving_Upward(bool lengthen, int type);
 void Moving_Downward(bool lengthen, int type);
 void Moving_Left(bool lengthen, int type);

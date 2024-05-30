@@ -73,7 +73,7 @@ int Music_Order = 0;
 int Speed = 0;
 int Mode = 0;
 int Health;
-int Oxygen;
+int Oxygen = 10;
 int Fortune;
 int Fortune_Times;
 const Media MediaList[6] = MEDIA_LIST;
@@ -377,7 +377,7 @@ void RetroSnake_Initialize(HWND hwnd, bool Using_Grid, bool Spawning_Foods, int 
     GameHwnd = hwnd;
     Forward = '\0';
     Health = 20;
-    Oxygen = 20;
+    Oxygen = 10;
     RetroSnake_Hashes.resize(RELATIVE_WIDTH + 1, vector<int>(RELATIVE_HEIGHT + 1, 0));
     Running = true;
 
@@ -391,10 +391,10 @@ void RetroSnake_Initialize(HWND hwnd, bool Using_Grid, bool Spawning_Foods, int 
     Existing_Ores = 0;
     Max_Score_In_This_Layer = 0;
     Curr_Score_In_This_Layer = 0;
-    Depth = 0;
+    Depth = 100;
     Level = 0;
     Total_Steps = 0;
-    Max_Steps = 0;
+    Max_Steps = Depth * RELATIVE_WIDTH * RELATIVE_HEIGHT;
     screenWidth = GetSystemMetrics(SM_CXSCREEN);
     screenHeight = GetSystemMetrics(SM_CYSCREEN);
 
@@ -431,12 +431,8 @@ void RetroSnake_Destruction() {
     KillTimer(NULL, LiquidFlowing);
     KillTimer(NULL, AutoDmg);
 
-    Hash_Temp.clear();
     while(!WaterBlockToHandle.empty())
         WaterBlockToHandle.pop();
-    WaterBlockVisited.clear();
-    DryingBlock.clear();
-    ObstacleAbove.clear();
 
     for (auto it = Liq.begin(); it != Liq.end(); it++)
         (*it).clear();
@@ -555,7 +551,7 @@ void Foods_Create(int* queue, int max) {
         place food;
         food.x = Random(1, RELATIVE_WIDTH - 2);
         food.y = Random(1, RELATIVE_HEIGHT - 2);
-        int T = Random(0, min(Level, max - 1));
+        int T = Random(0, min(Depth, max - 1));
         int type = queue[T];
 
         if (RetroSnake_Hashes[food.x][food.y] == 0 && Adjacent_Unit_Amount(food, 0) > 3) {
@@ -584,13 +580,13 @@ void Foods_Spawn(int Amount) {
         int queue[6] = { 0, 1, 2, 4, 5, 7 };
         Foods_Create(queue, 6);
     }
-    if (Level >= 3) {
+    if (Depth >= 10) {
         int amount = Random(1, 2);
         for (int i = 0; i <= amount; i++) {
             Foods_Create(3, 1);
         }
     }
-    if (Level >= 5) {
+    if (Depth >= 30) {
         int amount = Random(1, 2);
         for (int i = 0; i <= amount; i++) {
             int roll = Random(0, 100);
@@ -745,24 +741,11 @@ void Random_Draw_Obstacle() {
     int cnt = 0;
     int list[4] = { 1, 2, 3, 4 };
     int Obstacle_Size = Random(1, 8);
-    if (Type == 3) {
-        int value = 0;
-        while (!WITHIN_OPEN_INTERVAL(value, 8, 64)) {
-            mt19937 gen((unsigned int)time(nullptr)); // 定义随机数生成器对象gen，使用time(nullptr)作为随机数生成器的种子
-            normal_distribution<double> dis(32.0, 1.0);
-            value = static_cast<int>(dis(gen));
-        }
-        Obstacle_Size = value;
-    }
-    else {
-        int value = 0;
-        while (!WITHIN_OPEN_INTERVAL(value, 4, 32)) {
-            mt19937 gen((unsigned int)time(nullptr)); // 定义随机数生成器对象gen，使用time(nullptr)作为随机数生成器的种子
-            normal_distribution<double> dis(8.0, 1.0);
-            value = static_cast<int>(dis(gen));
-        }
-        Obstacle_Size = value;
-    }
+    if (Type == 3) 
+        Obstacle_Size = Random(8, 64);
+    else 
+        Obstacle_Size = Random(4, 32);
+    
     
 
     place temp = { x, y };
@@ -775,7 +758,7 @@ void Random_Draw_Obstacle() {
     for (int i = 1; i < Obstacle_Size && cnt <= 2 * Obstacle_Size; i++) {
         while (1) {
             if (cnt >= 4) break;
-            int forward = Detect(Translate(x, y), 4, list[cnt]);
+            int forward = Detect(Translate(x, y), Type * 10000, list[cnt]);
             if (forward == 1 && x - 1 >= 0 && RetroSnake_Hashes[x - 1][y] == 0) {
                 cnt = 0;
                 ObstaclePlace.push_back(LEFT(Translate(x, y)));
@@ -882,7 +865,7 @@ int Surrounding_Unit_Amount(place location, int type) {
     return cnt;
 }
 
-void Shorten(int begin) {
+void Shorten(int begin, int model) {
     // Need to debug
     if (Length < begin and Owe_Length) {
         Owe_Length -= begin;
@@ -899,7 +882,10 @@ void Shorten(int begin) {
     auto it = SnakePlace.end() - 1;
     while (i++) {
         //putimage((*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, &bp);
-        Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, L"Blocks/Stone.png");
+        if (model == 1)
+            Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, L"Blocks/Stone.png");
+        else if (model == 2)
+            Draw_Image(GameHwnd, (*it).x * IMAGE_SIZE, (*it).y * IMAGE_SIZE, L"Blocks/Stone_Dark.png");
         RetroSnake_Hashes[(*it).x][(*it).y] = 0;
         SnakePlace.pop_back();
         it = SnakePlace.end() - 1;
@@ -1217,7 +1203,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] <= 0) {
                     Owe_Length--;
                     Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) { 
+                        In_The_Water = false; 
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10000 and Passive) {
                     Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
@@ -1228,7 +1218,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10 and RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] < 1000) {
                     Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else {
                     cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y - 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] << endl;
@@ -1238,7 +1232,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
             else {
                 if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] <= 0) {
                     Moving_Upward(false);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10000 and Passive) {
                     Moving_Upward(false);
@@ -1248,7 +1246,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] >= 10 and RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] < 1000) {
                     Moving_Upward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1]);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else {
                     cout << "You dead in " << SnakePlace[0].x << SnakePlace[0].y - 1 << " for " << RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y - 1] << endl;
@@ -1269,7 +1271,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] <= 0) {
                     Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
                     Owe_Length--;
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10000 and Passive) {
                     Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
@@ -1280,7 +1286,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10 and RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] < 1000) {
                     Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                     
                 else {
@@ -1291,7 +1301,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
             else {
                 if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] <= 0) {
                     Moving_Downward(false);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10000 and Passive) {
                     Moving_Downward(false);
@@ -1301,7 +1315,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] >= 10 and RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1] < 1000) {
                     Moving_Downward(true, RetroSnake_Hashes[SnakePlace[0].x][SnakePlace[0].y + 1]);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                     
                 else {
@@ -1323,7 +1341,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] <= 0) {
                     Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
                     Owe_Length--;
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10000 and Passive) {
                     Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
@@ -1334,7 +1356,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10 and RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] < 1000) {
                     Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else {
                     cout << "You dead in " << SnakePlace[0].x - 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] << endl;
@@ -1344,7 +1370,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
             else {
                 if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] <= 0) {
                     Moving_Left(false);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10000 and Passive) {
                     Moving_Left(false);
@@ -1354,7 +1384,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] >= 10 and RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] < 1000) {
                     Moving_Left(true, RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y]);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else {
                     cout << "You dead in " << SnakePlace[0].x - 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x - 1][SnakePlace[0].y] << endl;
@@ -1375,7 +1409,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] <= 0) {
                     Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
                     Owe_Length--;
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10000 and Passive) {
                     Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
@@ -1386,7 +1424,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10 and RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] < 1000) {
                     Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else {
                     cout << "You dead in " << SnakePlace[0].x + 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] << endl;
@@ -1396,7 +1438,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
             else {
                 if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] <= 0) {
                     Moving_Right(false);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10000 and Passive) {
                     Moving_Right(false);
@@ -1406,7 +1452,11 @@ int KeyBoard_Input(int userKey, bool Passive) {
                 }
                 else if (RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] >= 10 and RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] < 1000) {
                     Moving_Right(true, RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y]);
-                    if (In_The_Water) In_The_Water = false;
+                    if (In_The_Water) {
+                        In_The_Water = false;
+                        Oxygen = 10;
+                        Refresh_ScoreBoard(10);
+                    }
                 }
                 else {
                     cout << "You dead in " << SnakePlace[0].x + 1 << SnakePlace[0].y << " for " << RetroSnake_Hashes[SnakePlace[0].x + 1][SnakePlace[0].y] << endl;
@@ -1436,7 +1486,6 @@ void RetroSnake_Hashes_Info() {
 
 int Fortune_Enchantment(int amount) {
     if (Fortune_Times <= 0) return amount;
-    Fortune_Times--;
     switch (Fortune) {
     case 0: return amount;
     case 1: {
@@ -1462,9 +1511,16 @@ int Fortune_Enchantment(int amount) {
 }
 
 void Eating(int type) {
-    //strcpy(str_latest, "Mining!");
     Current_Foods_Amount--;
-    int amount = Fortune_Enchantment(1);
+    int amount = 1;
+    if (type != 13 and type != 16 and Fortune and Fortune_Times > 0 and Awards[5] > 0) {
+        Fortune_Times--;
+        Awards[5]--;
+        Refresh_ScoreBoard(5);
+        Refresh_ScoreBoard(11);
+        amount = Fortune_Enchantment(1);
+    }
+    if (Fortune == 0) Fortune_Times = 0;
     Awards[type - 10] += amount;
     Theoretical_Score += Reward[type - 10] * amount;
     Curr_Score_In_This_Layer += Reward[type - 10] * amount;
@@ -1481,8 +1537,10 @@ void Eating(int type) {
         int amount = Fortune_Enchantment(Random(3, 8));
         Awards[type - 10] += amount;
     }
-    else if (type == 16)
+    else if (type == 16) {
         Shorten(SnakePlace.size() - 3);
+        Owe_Length = 0;
+    }
 
     Refresh_ScoreBoard(type - 10);
 }
@@ -1494,7 +1552,7 @@ void Level_Up() {
 
     BreakTime *= 0.8;
 
-    Max_Steps += RELATIVE_WIDTH * RELATIVE_HEIGHT;
+    Max_Steps = Depth * RELATIVE_WIDTH * RELATIVE_HEIGHT;
     //Multiply += 0.5;
     for(int i = 0; i < Liq.size(); i++)
         Liq[i].clear();
@@ -1505,7 +1563,7 @@ void Level_Up() {
     
     //Clear_Windows();
     Owe_Length = Length - 1 + Owe_Length;
-    Shorten(SnakePlace.size() - 1);
+    Shorten(SnakePlace.size() - 1, 1);
     //Length = 1;
     int temp = Random(1, 4);
     for (int i = 0; i < temp; i++) {
@@ -1816,17 +1874,15 @@ void Refresh_ScoreBoard(int Type) {
         mbstowcs(wdepth, depth, 256);
         Draw_Text(ScoreBoardHwnd, false, 8, 480, Color(255, 255, 255, 255), L"Monaco", 16, wdepth);
 
-        char health[256] = "\0";
-        sprintf(health, "%d", Health);
-        wchar_t whealth[256];
-        mbstowcs(whealth, health, 256);
-        Draw_Text(ScoreBoardHwnd, false, 8, 576, Color(255, 255, 255, 255), L"Monaco", 16, whealth);
+        for (int i = 0; i < Health / 2; i++) {
+            Draw_Image(ScoreBoardHwnd, 38 + 18 * i, 544, L"Health.png");
+        }
+        if (Health % 2)
+            Draw_Image(ScoreBoardHwnd, 38 + ((Health / 2) + 1) * 18, 544, L"Half_Health.png");
 
-        char oxy[256] = "\0";
-        sprintf(oxy, "%d", Oxygen);
-        wchar_t woxy[256];
-        mbstowcs(woxy, oxy, 256);
-        Draw_Text(ScoreBoardHwnd, false, 8, 672, Color(255, 255, 255, 255), L"Monaco", 16, woxy);
+        for (int i = 0; i < Oxygen; i++) {
+            Draw_Image(ScoreBoardHwnd, 38 + 18 * i, 18 * IMAGE_SIZE, L"Oxygen.png");
+        }
         break;
     }
     case 0: {
@@ -1909,24 +1965,36 @@ void Refresh_ScoreBoard(int Type) {
     }
     case 9: {
         for (int i = 0; i < 8; i++) {
-            Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 18 * IMAGE_SIZE, L"Blocks/dirt.png");
+            Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 17 * IMAGE_SIZE, L"Blocks/dirt.png");
         }
-        char health[256] = "\0";
-        sprintf(health, "%d", Health);
-        wchar_t whealth[256];
-        mbstowcs(whealth, health, 256);
-        Draw_Text(ScoreBoardHwnd, false, 8, 576, Color(255, 255, 255, 255), L"Monaco", 16, whealth);
+
+        for (int i = 0; i < Health / 2; i++) {
+            Draw_Image(ScoreBoardHwnd, 38 + 18 * i, 17 * IMAGE_SIZE, L"Health.png");
+        }
+        if (Health % 2)
+            Draw_Image(ScoreBoardHwnd, 38 + ((Health / 2)) * 18, 17 * IMAGE_SIZE, L"Half_Health.png");
         break;
     }
     case 10: {
         for (int i = 0; i < 8; i++) {
+            Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 18 * IMAGE_SIZE, L"Blocks/dirt.png");
+        }
+        for (int i = 0; i < Oxygen; i++) {
+            Draw_Image(ScoreBoardHwnd, 38 + 18 * i, 18 * IMAGE_SIZE, L"Oxygen.png");
+        }
+    }
+    case 11: {
+        for (int i = 0; i < 8; i++) {
             Draw_Image(ScoreBoardHwnd, i * IMAGE_SIZE, 21 * IMAGE_SIZE, L"Blocks/dirt.png");
         }
-        char oxy[256] = "\0";
-        sprintf(oxy, "%d", Oxygen);
-        wchar_t woxy[256];
-        mbstowcs(woxy, oxy, 256);
-        Draw_Text(ScoreBoardHwnd, false, 8, 672, Color(255, 255, 255, 255), L"Monaco", 16, woxy);
+        if (Fortune_Times) {
+            char ench[256] = "\0";
+            sprintf(ench, "Fortune %d %d", Fortune, Fortune_Times);
+            wchar_t wench[256];
+            mbstowcs(wench, ench, 256);
+            Draw_Text(ScoreBoardHwnd, false, 8, 672, Color(255, 255, 255, 255), L"Monaco", 16, wench);
+        }
+
         break;
     }
     }
@@ -1952,9 +2020,8 @@ void ScoreBoard_Painting() {
 
     Draw_Text(ScoreBoardHwnd, false, 64 - 8, 352, Color(255, 255, 255, 255), L"Monaco", 16, L"Total Score");
     Draw_Text(ScoreBoardHwnd, false, 64 - 10, 448, Color(255, 255, 255, 255), L"Monaco", 16, L"Current Depth");
-    Draw_Text(ScoreBoardHwnd, false, 64 - 10, 544, Color(255, 255, 255, 255), L"Monaco", 16, L"Health");
-    Draw_Text(ScoreBoardHwnd, false, 64 - 10, 640, Color(255, 255, 255, 255), L"Monaco", 16, L"Oxygen");
-    Draw_Text(ScoreBoardHwnd, false, 64 - 10, 748, Color(255, 255, 255, 255), L"Monaco", 16, L"Enchantment");
+    
+    Draw_Text(ScoreBoardHwnd, false, 64 - 10, 640, Color(255, 255, 255, 255), L"Monaco", 16, L"Enchantment");
     //for (int i = 0; i < 160; i += 16) {
     //    Draw_Image(ScoreBoardHwnd, 8 + i, 640, L"Health.png");
     //}   
@@ -2067,6 +2134,7 @@ void Music_Player() {
         Play_Media(MediaList[Music_Order].Media, NULL, SND_ASYNC | SND_FILENAME);
         MusicPlayer = SetTimer(GameHwnd, 4, MediaList[Music_Order].Length, (TIMERPROC)Music_Player);
         Music_Order++;
+        if (Music_Order == 6) Music_Order = 0;
     } else if (WITHIN_CLOSED_INTERVAL(Music, 1, 6)) {
         Play_Media(MediaList[Music - 1].Media, NULL, SND_ASYNC | SND_FILENAME);
         MusicPlayer = SetTimer(GameHwnd, 4, MediaList[Music - 1].Length, (TIMERPROC)Music_Player);
@@ -2092,10 +2160,22 @@ void Diving() {
 }
 
 void Damage() {
-    Burn();
+    if (Forward != '\0')
+        Burn();
     if (In_The_Water)
         Diving();
     if (Health <= 0) GameOver();
+}
+
+void ClearAll() {
+    for (int i = 0; i < RELATIVE_WIDTH; i++) {
+        for (int j = 0; j < RELATIVE_HEIGHT; j++) {
+            if (RetroSnake_Hashes[i][j] == 0) {
+                RetroSnake_Hashes[i][j] = -1;
+                Draw_Image(GameHwnd, i * IMAGE_SIZE, j * IMAGE_SIZE, L"Blocks/Stone_Dark.png");
+            }
+        }
+    }
 }
 
 void Solidification(place location) {
@@ -2138,6 +2218,7 @@ void Random_Fortune(int level) {
     else if (Fortune == level) {
         Fortune_Times += 10;
     }
+    Refresh_ScoreBoard(11);
 }
 
 void Random_Shorten(int min, int max) {
@@ -2355,7 +2436,6 @@ LRESULT CALLBACK NewGameProc(HWND GamehWnd, UINT message, WPARAM wParam, LPARAM 
             case VK_SPACE: {
                 if (Curr_Score_In_This_Layer * 2 >= Max_Score_In_This_Layer)
                     Level_Up();
-                //InvalidateRect(hWnd, NULL, TRUE);
             }
         }
         if (!Invaild) {
